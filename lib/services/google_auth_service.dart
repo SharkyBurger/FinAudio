@@ -103,6 +103,10 @@ class GoogleAuthService extends ChangeNotifier {
   static const String _serverClientId =
       '1023738817283-365rhlp8emot091uh6jctpdqo1gq29ek.apps.googleusercontent.com';
 
+  /// Standard loopback port for desktop OAuth 2.0 flow.
+  /// Add `http://127.0.0.1:52473` to Google Cloud Console Authorized redirect URIs.
+  static const int desktopOAuthPort = 52473;
+
   // Basic non-sensitive scope - allows sign in without Google verification 403 block.
   // InnerTube is used for music playback, search, and catalog operations.
   static const List<String> _scopes = <String>[
@@ -118,6 +122,24 @@ class GoogleAuthService extends ChangeNotifier {
   static const String _keySubscribedArtists = 'google_subscribed_artists_v3';
   static const String _keyInnerTubeHandle = 'innertube_handle';
   static const String _keyInnerTubeAuth = 'innertube_auth';
+  static const String _keyCustomClientId = 'google_custom_client_id';
+
+  String? _customClientId;
+  String get serverClientId => (_customClientId != null && _customClientId!.isNotEmpty)
+      ? _customClientId!
+      : _serverClientId;
+  String? get customClientId => _customClientId;
+
+  Future<void> setCustomClientId(String? id) async {
+    _customClientId = id?.trim();
+    final prefs = await SharedPreferences.getInstance();
+    if (_customClientId != null && _customClientId!.isNotEmpty) {
+      await prefs.setString(_keyCustomClientId, _customClientId!);
+    } else {
+      await prefs.remove(_keyCustomClientId);
+    }
+    notifyListeners();
+  }
 
   static const String _authBridgeHtml = '''<!DOCTYPE html>
 <html>
@@ -323,6 +345,8 @@ class GoogleAuthService extends ChangeNotifier {
         } catch (_) {}
       }
 
+      _customClientId = prefs.getString(_keyCustomClientId);
+
       final email = prefs.getString(_keyUserEmail);
       if (email != null && email.isNotEmpty) {
         final id = prefs.getString(_keyUserId) ?? '';
@@ -481,7 +505,12 @@ class GoogleAuthService extends ChangeNotifier {
   }) async {
     HttpServer? server;
     try {
-      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      try {
+        server = await HttpServer.bind(InternetAddress.loopbackIPv4, desktopOAuthPort);
+      } catch (bindErr) {
+        debugPrint('GoogleAuthService: Port $desktopOAuthPort busy, falling back: $bindErr');
+        server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      }
       final port = server.port;
       final redirectUri = 'http://127.0.0.1:$port';
 
@@ -490,7 +519,7 @@ class GoogleAuthService extends ChangeNotifier {
       );
 
       final authUri = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
-        'client_id': _serverClientId,
+        'client_id': serverClientId,
         'redirect_uri': redirectUri,
         'response_type': 'token',
         'scope': 'openid email profile',
@@ -645,7 +674,7 @@ class GoogleAuthService extends ChangeNotifier {
           final res = await http.post(
             Uri.parse('https://oauth2.googleapis.com/token'),
             body: {
-              'client_id': _serverClientId,
+              'client_id': serverClientId,
               'redirect_uri': redirectUri,
               'code': code,
               'grant_type': 'authorization_code',
