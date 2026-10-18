@@ -865,6 +865,47 @@ class GoogleAuthService extends ChangeNotifier {
     }
   }
 
+  /// Sign in directly using a Google OAuth Access Token (`ya29...`) or bearer token.
+  /// Validates with Google UserInfo API, pulls avatar and email, and establishes the authenticated session.
+  Future<GoogleIdentity> signInWithGoogleToken(String token) async {
+    final cleanToken = token.trim().replaceAll('Bearer ', '');
+    if (cleanToken.isEmpty) {
+      throw ArgumentError('Please provide a Google Access Token.');
+    }
+
+    final res = await http.get(
+      Uri.parse('https://www.googleapis.com/oauth2/v3/userinfo'),
+      headers: {'Authorization': 'Bearer $cleanToken'},
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception('Invalid or expired Google Token (${res.statusCode}): ${res.body}');
+    }
+
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    final id = data['sub'] as String? ?? '';
+    final email = data['email'] as String? ?? 'google_user@gmail.com';
+    final displayName = data['name'] as String? ?? email;
+    final photoUrl = data['picture'] as String?;
+
+    final identity = SavedGoogleAccount(
+      id: id,
+      email: email,
+      displayName: displayName,
+      photoUrl: photoUrl,
+    );
+
+    _currentUser = identity;
+    _accessToken = cleanToken;
+    _tokenTimestamp = DateTime.now();
+
+    await _saveSession(identity, cleanToken, _tokenTimestamp);
+    notifyListeners();
+
+    debugPrint('GoogleAuthService: Signed in via Google Token as $email');
+    return identity;
+  }
+
   Future<void> signOut() async {
     if (isNativeGoogleSignInPluginSupported) {
       try {

@@ -61,11 +61,11 @@ class _GoogleSignInDialogState extends State<_GoogleSignInDialog> {
   }
 
   Future<void> _handleConnect() async {
-    final handle = _handleController.text.trim();
+    final input = _handleController.text.trim();
     final cookie = _cookieController.text.trim();
 
-    if (handle.isEmpty && cookie.isEmpty) {
-      setState(() => _error = 'Please enter your YouTube handle or channel ID.');
+    if (input.isEmpty && cookie.isEmpty) {
+      setState(() => _error = 'Please enter your YouTube handle (@yourname) or Google Token (ya29...).');
       return;
     }
 
@@ -75,16 +75,20 @@ class _GoogleSignInDialogState extends State<_GoogleSignInDialog> {
     });
 
     try {
-      await widget.authService.signInWithInnerTube(
-        handleOrChannelId: handle,
-        authCookie: cookie.isNotEmpty ? cookie : null,
-      );
+      if (input.startsWith('ya29.')) {
+        await widget.authService.signInWithGoogleToken(input);
+      } else {
+        await widget.authService.signInWithInnerTube(
+          handleOrChannelId: input,
+          authCookie: cookie.isNotEmpty ? cookie : null,
+        );
+      }
       if (!mounted) return;
       widget.onSignedIn?.call();
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Connected as ${widget.authService.currentUser?.displayName ?? 'YouTube User'}!'),
+          content: Text('Connected as ${widget.authService.currentUser?.displayName ?? 'User'}!'),
           backgroundColor: widget.accentColor,
         ),
       );
@@ -124,9 +128,8 @@ class _GoogleSignInDialogState extends State<_GoogleSignInDialog> {
         _loading = false;
         final errStr = '$e';
         if (errStr.contains('redirect_uri_mismatch') || errStr.contains('400')) {
-          _error = 'Google blocked redirect URI (Error 400: redirect_uri_mismatch).\n'
-              'Add http://127.0.0.1:${GoogleAuthService.desktopOAuthPort} to your Google Cloud Authorized redirect URIs, '
-              'or connect with your YouTube Handle (@username) below!';
+          _error = 'Google Cloud rejected browser sign-in.\n'
+              'Skip Google Cloud entirely: type your YouTube handle (@username) or Google token above!';
         } else {
           _error = errStr;
         }
@@ -321,7 +324,7 @@ class _GoogleSignInDialogState extends State<_GoogleSignInDialog> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Text(
-                      'OR SIGN IN WITH GOOGLE CLOUD OAUTH',
+                      'OR VIA BROWSER',
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -356,72 +359,6 @@ class _GoogleSignInDialogState extends State<_GoogleSignInDialog> {
 
               if (!isNativeSupported) ...[
                 const SizedBox(height: 10),
-                // OAuth Helper Card for Desktop
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest.withAlpha(100),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: theme.colorScheme.outlineVariant.withAlpha(50)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.info_outline_rounded, size: 15, color: widget.accentColor),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Google Cloud Redirect URI:',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black26,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          children: [
-                            const Expanded(
-                              child: SelectableText(
-                                redirectUri,
-                                style: TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.white70),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.copy_rounded, size: 15),
-                              tooltip: 'Copy Redirect URI',
-                              constraints: const BoxConstraints(),
-                              padding: EdgeInsets.zero,
-                              onPressed: () {
-                                Clipboard.setData(const ClipboardData(text: redirectUri));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Copied $redirectUri to clipboard!')),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'If Google shows Error 400: redirect_uri_mismatch, add this URI to your Google Cloud project\'s Authorized redirect URIs, OR create a "Desktop app" client ID.',
-                        style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant.withAlpha(180)),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Expandable Custom Client ID
-                const SizedBox(height: 6),
                 InkWell(
                   onTap: () => setState(() => _showOAuthDetails = !_showOAuthDetails),
                   borderRadius: BorderRadius.circular(8),
@@ -432,13 +369,17 @@ class _GoogleSignInDialogState extends State<_GoogleSignInDialog> {
                         Icon(
                           _showOAuthDetails ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
                           size: 16,
-                          color: widget.accentColor,
+                          color: theme.colorScheme.onSurfaceVariant.withAlpha(150),
                         ),
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
-                            _showOAuthDetails ? 'Hide Custom Client ID' : 'Use custom OAuth Client ID (optional)',
-                            style: TextStyle(fontSize: 11, color: widget.accentColor, fontWeight: FontWeight.w600),
+                            _showOAuthDetails ? 'Hide Google Cloud settings' : 'Advanced: Google Cloud settings (optional)',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: theme.colorScheme.onSurfaceVariant.withAlpha(160),
+                              fontWeight: FontWeight.w500,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -447,35 +388,94 @@ class _GoogleSignInDialogState extends State<_GoogleSignInDialog> {
                   ),
                 ),
                 if (_showOAuthDetails) ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _clientIdController,
-                          style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 12),
-                          decoration: InputDecoration(
-                            hintText: 'Paste custom Client ID (...apps.googleusercontent.com)',
-                            hintStyle: TextStyle(
-                              color: theme.colorScheme.onSurfaceVariant.withAlpha(120),
-                              fontSize: 11,
+                  const SizedBox(height: 8),
+                  // OAuth Helper Card for Desktop
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest.withAlpha(100),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: theme.colorScheme.outlineVariant.withAlpha(50)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.info_outline_rounded, size: 15, color: widget.accentColor),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Google Cloud Redirect URI:',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.onSurface,
+                              ),
                             ),
-                            filled: true,
-                            fillColor: theme.colorScheme.surfaceContainerHighest,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide.none,
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black26,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            children: [
+                              const Expanded(
+                                child: SelectableText(
+                                  redirectUri,
+                                  style: TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.white70),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.copy_rounded, size: 15),
+                                tooltip: 'Copy Redirect URI',
+                                constraints: const BoxConstraints(),
+                                padding: EdgeInsets.zero,
+                                onPressed: () {
+                                  Clipboard.setData(const ClipboardData(text: redirectUri));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Copied $redirectUri to clipboard!')),
+                                  );
+                                },
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: _saveCustomClientId,
-                        child: const Text('Save'),
-                      ),
-                    ],
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _clientIdController,
+                                style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 12),
+                                decoration: InputDecoration(
+                                  hintText: 'Paste custom Client ID (...apps.googleusercontent.com)',
+                                  hintStyle: TextStyle(
+                                    color: theme.colorScheme.onSurfaceVariant.withAlpha(120),
+                                    fontSize: 11,
+                                  ),
+                                  filled: true,
+                                  fillColor: theme.colorScheme.surfaceContainerHighest,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: _saveCustomClientId,
+                              child: const Text('Save'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ],
