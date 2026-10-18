@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart' hide SearchPlaylist;
+import 'package:ytmusicapi_dart/ytmusicapi_dart.dart';
 import '../models/local_playlist.dart';
 import 'download_service.dart';
 import 'player_service.dart';
@@ -237,6 +239,155 @@ class PlaylistService extends ChangeNotifier {
 
     if (existingIndex >= 0) {
       // Update existing
+      final existing = _playlists[existingIndex];
+      final updated = playlist.copyWith(
+        id: existing.id,
+        createdAt: existing.createdAt,
+      );
+      _playlists[existingIndex] = updated;
+      await _persist();
+      notifyListeners();
+      return updated;
+    } else {
+      _playlists.insert(0, playlist);
+      await _persist();
+      notifyListeners();
+      return playlist;
+    }
+  }
+
+  /// Imports a YouTube or YouTube Music playlist by ID or URL into a persistent LocalPlaylist.
+  Future<LocalPlaylist> createFromYouTube({
+    required String playlistIdOrUrl,
+    String? customTitle,
+    void Function(int fetched, int total)? onProgress,
+  }) async {
+    // 1. Clean the playlist ID
+    String cleanId = playlistIdOrUrl.trim();
+    if (cleanId.contains('list=')) {
+      final uri = Uri.tryParse(cleanId);
+      cleanId = uri?.queryParameters['list'] ?? cleanId;
+      if (cleanId.contains('&')) {
+        cleanId = cleanId.split('&').first;
+      }
+    }
+    cleanId = cleanId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
+
+    if (cleanId.isEmpty) {
+      throw ArgumentError('Invalid YouTube playlist URL or ID.');
+    }
+
+    String title = customTitle ?? 'YouTube Playlist';
+    String description = 'Imported from YouTube';
+    String thumbnailUrl = '';
+    final tracks = <LocalPlaylistTrack>[];
+
+    // Try YTMusic first for rich track info
+    try {
+      final yt = await YTMusic.create();
+      final res = await yt.getPlaylist(cleanId);
+      if (res['title'] != null && (customTitle == null || customTitle.isEmpty)) {
+        title = res['title'].toString();
+      }
+      if (res['description'] != null && res['description'].toString().isNotEmpty) {
+        description = res['description'].toString();
+      }
+      final thumbs = res['thumbnails'];
+      if (thumbs is List && thumbs.isNotEmpty && thumbs.last is Map) {
+        thumbnailUrl = thumbs.last['url']?.toString() ?? '';
+      }
+
+      final rawTracks = res['tracks'] as List? ?? [];
+      for (final item in rawTracks) {
+        if (item is! Map) continue;
+        final vid = item['videoId']?.toString();
+        if (vid == null || vid.isEmpty) continue;
+        final tTitle = item['title']?.toString() ?? 'Untitled';
+        String artist = '';
+        final artists = item['artists'];
+        if (artists is List && artists.isNotEmpty) {
+          artist = artists
+              .map((a) => a is Map ? (a['name']?.toString() ?? '') : a.toString())
+              .where((s) => s.isNotEmpty)
+              .join(', ');
+        }
+        if (artist.isEmpty && item['author'] != null) {
+          artist = item['author'].toString();
+        }
+        String thumb = 'https://img.youtube.com/vi/$vid/hqdefault.jpg';
+        final itemThumbs = item['thumbnails'];
+        if (itemThumbs is List && itemThumbs.isNotEmpty && itemThumbs.last is Map) {
+          thumb = itemThumbs.last['url']?.toString() ?? thumb;
+        }
+
+        Duration dur = Duration.zero;
+        if (item['duration_seconds'] is num) {
+          dur = Duration(seconds: (item['duration_seconds'] as num).toInt());
+        }
+
+        tracks.add(LocalPlaylistTrack(
+          title: tTitle,
+          artist: artist.isNotEmpty ? artist : 'Unknown Artist',
+          thumbnailUrl: thumb,
+          youtubeVideoId: vid,
+          duration: dur,
+        ));
+      }
+    } catch (e) {
+      debugPrint('createFromYouTube YTMusic notice: $e');
+    }
+
+    // Fallback to YoutubeExplode if YTMusic returned 0 tracks
+    if (tracks.isEmpty) {
+      final ytExplode = YoutubeExplode();
+      try {
+        final pl = await ytExplode.playlists.get(cleanId);
+        if (customTitle == null || customTitle.isEmpty) {
+          title = pl.title;
+        }
+        if (description == 'Imported from YouTube' && pl.description.isNotEmpty) {
+          description = pl.description;
+        }
+        if (thumbnailUrl.isEmpty) {
+          thumbnailUrl = pl.thumbnails.highResUrl;
+        }
+        final vids = await ytExplode.playlists.getVideos(cleanId).toList();
+        for (final v in vids) {
+          tracks.add(LocalPlaylistTrack(
+            title: v.title,
+            artist: v.author,
+            thumbnailUrl: v.thumbnails.highResUrl.isNotEmpty
+                ? v.thumbnails.highResUrl
+                : 'https://img.youtube.com/vi/${v.id.value}/hqdefault.jpg',
+            youtubeVideoId: v.id.value,
+            duration: v.duration ?? Duration.zero,
+          ));
+        }
+      } catch (e) {
+        debugPrint('createFromYouTube YoutubeExplode notice: $e');
+      } finally {
+        ytExplode.close();
+      }
+    }
+
+    if (tracks.isEmpty) {
+      throw Exception('Could not find or load tracks from YouTube playlist "$cleanId". Make sure the playlist is public or unlisted.');
+    }
+
+    final targetId = 'yt_$cleanId';
+    final existingIndex = _playlists.indexWhere((p) => p.id == targetId);
+
+    final playlist = LocalPlaylist(
+      id: targetId,
+      title: title,
+      description: description,
+      thumbnailUrl: thumbnailUrl,
+      source: 'youtube',
+      createdAt: DateTime.now(),
+      tracks: tracks,
+    );
+
+    if (existingIndex >= 0) {
       final existing = _playlists[existingIndex];
       final updated = playlist.copyWith(
         id: existing.id,

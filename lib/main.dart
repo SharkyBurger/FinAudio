@@ -6340,6 +6340,45 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     }
   }
 
+  Future<void> _saveToLocalPlaylists() async {
+    if (_videos.isEmpty) return;
+    try {
+      final localTracks = _videos
+          .map((v) => LocalPlaylistTrack(
+                title: v.title,
+                artist: v.channelTitle.isNotEmpty ? v.channelTitle : 'Unknown Artist',
+                thumbnailUrl: v.thumbnailUrl,
+                youtubeVideoId: v.videoId,
+                duration: v.duration,
+              ))
+          .toList();
+
+      final pl = LocalPlaylist(
+        id: 'yt_${widget.playlist.id}',
+        title: widget.playlist.title,
+        description: widget.playlist.description,
+        thumbnailUrl: widget.playlist.thumbnailUrl,
+        source: 'youtube',
+        createdAt: DateTime.now(),
+        tracks: localTracks,
+      );
+
+      await widget.playlistService.savePlaylist(pl);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Saved "${pl.title}" (${localTracks.length} songs) to your library!'),
+          backgroundColor: const Color(0xFFFF0000),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save to library: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -6407,9 +6446,15 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                           icon: const Icon(Icons.play_arrow, size: 18),
                           label: Text('Play all (${_videos.length})'),
                         ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: _saveToLocalPlaylists,
+                          icon: const Icon(Icons.playlist_add_rounded, size: 18),
+                          label: const Text('Save to Library'),
+                        ),
                         const Spacer(),
                         Text(
-                          'Music only · ${_videos.length} songs',
+                          '${_videos.length} songs',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),

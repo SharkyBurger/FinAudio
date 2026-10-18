@@ -12,6 +12,7 @@ import 'package:finaudio/ui/artist_screen.dart';
 import 'package:finaudio/ui/cached_screen.dart';
 import 'package:finaudio/ui/downloads_screen.dart';
 import 'package:finaudio/widgets/add_to_playlist_sheet.dart';
+import 'package:finaudio/widgets/google_sign_in_dialog.dart';
 
 /// Full-featured, modern Library Tab matching streaming app standards:
 /// Top sorting/category pills:
@@ -866,8 +867,20 @@ class _LibraryTabState extends State<LibraryTab> with SingleTickerProviderStateM
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   icon: const Icon(Icons.download_rounded, size: 16),
-                  label: const Text('Import', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  label: const Text('Spotify', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   onPressed: () => _showImportSpotifyDialog(context),
+                ),
+                const SizedBox(width: 6),
+                FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF0000).withAlpha(40),
+                    foregroundColor: const Color(0xFFFF0000),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.video_library_rounded, size: 16),
+                  label: const Text('YouTube', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  onPressed: () => _showImportYouTubeDialog(context),
                 ),
                 const SizedBox(width: 6),
                 IconButton(
@@ -918,8 +931,13 @@ class _LibraryTabState extends State<LibraryTab> with SingleTickerProviderStateM
                         backgroundColor: const Color(0xFFFF0000).withAlpha(30),
                         foregroundColor: const Color(0xFFFF0000),
                       ),
-                      onPressed: () => widget.authService.signIn(),
-                      child: const Text('Sign in', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      onPressed: () => showGoogleSignInDialog(
+                        context: context,
+                        authService: widget.authService,
+                        accentColor: accent,
+                        onSignedIn: () => _loadYtPlaylists(),
+                      ),
+                      child: const Text('Connect Account', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -1049,11 +1067,26 @@ class _LibraryTabState extends State<LibraryTab> with SingleTickerProviderStateM
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Text(
-                  _playlistsSearchQuery.isNotEmpty
-                      ? 'No YouTube playlists matching "$_playlistsSearchQuery"'
-                      : 'No playlists found in your YouTube account.',
-                  style: TextStyle(fontSize: 12, color: text.withAlpha(140)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _playlistsSearchQuery.isNotEmpty
+                          ? 'No YouTube playlists matching "$_playlistsSearchQuery"'
+                          : 'No playlists found in your YouTube account.',
+                      style: TextStyle(fontSize: 12, color: text.withAlpha(140)),
+                    ),
+                    const SizedBox(height: 6),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        foregroundColor: accent,
+                      ),
+                      icon: const Icon(Icons.link_rounded, size: 16),
+                      label: const Text('Import any YouTube Playlist via Link/ID', style: TextStyle(fontSize: 12)),
+                      onPressed: () => _showImportYouTubeDialog(context),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -3064,6 +3097,111 @@ class _LibraryTabState extends State<LibraryTab> with SingleTickerProviderStateM
             child: const Text('Create'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showImportYouTubeDialog(BuildContext context) async {
+    final urlController = TextEditingController();
+    bool isImporting = false;
+    String? errorText;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.video_library_rounded, color: Color(0xFFFF0000), size: 22),
+                SizedBox(width: 8),
+                Text('Import YouTube Playlist'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Paste a YouTube or YouTube Music playlist link or ID to import all tracks into your library:',
+                    style: TextStyle(fontSize: 13, color: Color(0xFFAAAAAA)),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: urlController,
+                    autofocus: true,
+                    enabled: !isImporting,
+                    decoration: InputDecoration(
+                      labelText: 'Playlist Link or ID',
+                      hintText: 'https://youtube.com/playlist?list=PL... or PL...',
+                      errorText: errorText,
+                      prefixIcon: const Icon(Icons.link_rounded),
+                    ),
+                  ),
+                  if (isImporting) ...[
+                    const SizedBox(height: 16),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 12),
+                        Text('Fetching playlist & tracks…', style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isImporting ? null : () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFF0000)),
+                onPressed: isImporting
+                    ? null
+                    : () async {
+                        final input = urlController.text.trim();
+                        if (input.isEmpty) {
+                          setDialogState(() => errorText = 'Please enter a playlist URL or ID.');
+                          return;
+                        }
+
+                        setDialogState(() {
+                          isImporting = true;
+                          errorText = null;
+                        });
+
+                        try {
+                          final saved = await widget.playlistService.createFromYouTube(playlistIdOrUrl: input);
+                          if (!ctx.mounted) return;
+                          Navigator.of(ctx).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Imported "${saved.title}" (${saved.trackCount} songs)!'),
+                              backgroundColor: const Color(0xFFFF0000),
+                            ),
+                          );
+                          widget.onOpenPlaylistDetail?.call(saved);
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          setDialogState(() {
+                            isImporting = false;
+                            errorText = 'Import failed: $e';
+                          });
+                        }
+                      },
+                child: const Text('Import'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

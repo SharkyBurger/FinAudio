@@ -75,11 +75,35 @@ class _GoogleSignInDialogState extends State<_GoogleSignInDialog> {
     });
 
     try {
-      if (input.startsWith('ya29.')) {
-        await widget.authService.signInWithGoogleToken(input);
+      String cleanInput = input;
+      if (cleanInput.contains('youtube.com/') || cleanInput.contains('youtu.be/')) {
+        final uri = Uri.tryParse(cleanInput);
+        if (uri != null) {
+          final segments = uri.pathSegments;
+          if (segments.isNotEmpty) {
+            if (segments.first.startsWith('@')) {
+              cleanInput = segments.first;
+            } else if (segments.first == 'channel' && segments.length > 1) {
+              cleanInput = segments[1];
+            } else if (segments.first == 'c' && segments.length > 1) {
+              cleanInput = segments[1];
+            } else {
+              cleanInput = segments.last;
+            }
+          }
+        }
+      } else if (!cleanInput.startsWith('@') &&
+          !cleanInput.startsWith('UC') &&
+          !cleanInput.startsWith('ya29.') &&
+          cleanInput.isNotEmpty) {
+        cleanInput = '@$cleanInput';
+      }
+
+      if (cleanInput.startsWith('ya29.')) {
+        await widget.authService.signInWithGoogleToken(cleanInput);
       } else {
         await widget.authService.signInWithInnerTube(
-          handleOrChannelId: input,
+          handleOrChannelId: cleanInput,
           authCookie: cookie.isNotEmpty ? cookie : null,
         );
       }

@@ -1228,6 +1228,25 @@ void main() {
         player.dispose();
       }, _TestHttpOverrides());
     });
+
+    test('PlaylistService createFromYouTube handles invalid and empty playlist inputs with clear errors', () async {
+      SharedPreferences.setMockInitialValues({});
+      final playlistService = PlaylistService();
+      await playlistService.init();
+
+      expect(
+        () => playlistService.createFromYouTube(playlistIdOrUrl: '   '),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('GoogleAuthService fetchPlaylists returns empty list when unauthenticated', () async {
+      SharedPreferences.setMockInitialValues({});
+      final auth = GoogleAuthService();
+      await auth.initialize();
+      final playlists = await auth.fetchPlaylists();
+      expect(playlists, isEmpty);
+    });
   });
 
   group('Now Playing Screen and Volume Control tests', () {

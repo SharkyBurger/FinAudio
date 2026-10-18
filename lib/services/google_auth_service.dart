@@ -528,7 +528,7 @@ class GoogleAuthService extends ChangeNotifier {
         'client_id': serverClientId,
         'redirect_uri': redirectUri,
         'response_type': 'code',
-        'scope': 'openid email profile',
+        'scope': 'openid email profile https://www.googleapis.com/auth/youtube.readonly',
         'state': state,
         'code_challenge': codeChallenge,
         'code_challenge_method': 'S256',
@@ -729,6 +729,33 @@ class GoogleAuthService extends ChangeNotifier {
       _tokenTimestamp = DateTime.now();
 
       await _saveSession(identity, accessToken, _tokenTimestamp);
+
+      // Auto-discover user's YouTube channel handle/ID for scraper fallback
+      try {
+        final chRes = await http.get(
+          Uri.parse('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true'),
+          headers: {'Authorization': 'Bearer $accessToken'},
+        );
+        if (chRes.statusCode == 200) {
+          final chData = jsonDecode(chRes.body) as Map<String, dynamic>;
+          final items = chData['items'] as List<dynamic>? ?? [];
+          if (items.isNotEmpty) {
+            final item = items.first as Map<String, dynamic>;
+            final chId = item['id'] as String?;
+            final snippet = item['snippet'] as Map<String, dynamic>? ?? {};
+            final customUrl = snippet['customUrl'] as String?;
+            final handleToSave = (customUrl != null && customUrl.isNotEmpty) ? customUrl : chId;
+            if (handleToSave != null && handleToSave.isNotEmpty) {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString(_keyInnerTubeHandle, handleToSave);
+              debugPrint('GoogleAuthService: Auto-saved YouTube handle: $handleToSave');
+            }
+          }
+        }
+      } catch (chErr) {
+        debugPrint('GoogleAuthService: YouTube channel discovery notice: $chErr');
+      }
+
       notifyListeners();
 
       debugPrint('GoogleAuthService: Desktop WebAuth succeeded for $email');
@@ -900,6 +927,33 @@ class GoogleAuthService extends ChangeNotifier {
     _tokenTimestamp = DateTime.now();
 
     await _saveSession(identity, cleanToken, _tokenTimestamp);
+
+    // Auto-discover user's YouTube channel handle/ID for scraper fallback
+    try {
+      final chRes = await http.get(
+        Uri.parse('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true'),
+        headers: {'Authorization': 'Bearer $cleanToken'},
+      );
+      if (chRes.statusCode == 200) {
+        final chData = jsonDecode(chRes.body) as Map<String, dynamic>;
+        final items = chData['items'] as List<dynamic>? ?? [];
+        if (items.isNotEmpty) {
+          final item = items.first as Map<String, dynamic>;
+          final chId = item['id'] as String?;
+          final snippet = item['snippet'] as Map<String, dynamic>? ?? {};
+          final customUrl = snippet['customUrl'] as String?;
+          final handleToSave = (customUrl != null && customUrl.isNotEmpty) ? customUrl : chId;
+          if (handleToSave != null && handleToSave.isNotEmpty) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_keyInnerTubeHandle, handleToSave);
+            debugPrint('GoogleAuthService: Auto-saved YouTube handle from token: $handleToSave');
+          }
+        }
+      }
+    } catch (chErr) {
+      debugPrint('GoogleAuthService: Token YouTube channel discovery notice: $chErr');
+    }
+
     notifyListeners();
 
     debugPrint('GoogleAuthService: Signed in via Google Token as $email');
@@ -982,34 +1036,113 @@ class GoogleAuthService extends ChangeNotifier {
       }
     }
 
-    // 2. InnerTube fallback: fetch playlists for saved channel or handle
+    // 2. Channel Playlists Scraper & InnerTube Fallback
     final prefs = await SharedPreferences.getInstance();
-    final handle = prefs.getString(_keyInnerTubeHandle) ?? _currentUser?.id;
-    if (handle != null &&
-        handle.isNotEmpty &&
-        !handle.contains('@youtube') &&
-        !handle.contains('@innertube') &&
-        !handle.contains('@example.com')) {
+    String? handle = prefs.getString(_keyInnerTubeHandle);
+
+    // If handle is missing but user is signed in with Google OAuth/Token, try to discover handle via channels endpoint
+    if ((handle == null || handle.isEmpty) && _accessToken != null && _accessToken!.isNotEmpty) {
+      try {
+        final chRes = await http.get(
+          Uri.parse('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true'),
+          headers: {'Authorization': 'Bearer $_accessToken'},
+        );
+        if (chRes.statusCode == 200) {
+          final chData = jsonDecode(chRes.body) as Map<String, dynamic>;
+          final items = chData['items'] as List<dynamic>? ?? [];
+          if (items.isNotEmpty) {
+            final item = items.first as Map<String, dynamic>;
+            final chId = item['id'] as String?;
+            final snippet = item['snippet'] as Map<String, dynamic>? ?? {};
+            final customUrl = snippet['customUrl'] as String?;
+            final handleToSave = (customUrl != null && customUrl.isNotEmpty) ? customUrl : chId;
+            if (handleToSave != null && handleToSave.isNotEmpty) {
+              handle = handleToSave;
+              await prefs.setString(_keyInnerTubeHandle, handleToSave);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('fetchPlaylists channel resolution notice: $e');
+      }
+    }
+
+    if (handle == null || handle.isEmpty) {
+      final email = _currentUser?.email ?? '';
+      if (email.contains('@youtube')) {
+        handle = email.replaceAll('@youtube', '');
+      } else if (email.contains('@innertube')) {
+        handle = email.replaceAll('@innertube', '');
+      } else if (_currentUser?.id != null && _currentUser!.id.startsWith('UC')) {
+        handle = _currentUser!.id;
+      }
+    }
+
+    if (handle != null && handle.trim().isNotEmpty) {
+      final clean = handle.trim();
+      final urlsToTry = <Uri>[];
+      if (clean.startsWith('@')) {
+        urlsToTry.add(Uri.parse('https://www.youtube.com/$clean/playlists'));
+      } else if (clean.startsWith('UC')) {
+        urlsToTry.add(Uri.parse('https://www.youtube.com/channel/$clean/playlists'));
+      } else {
+        urlsToTry.add(Uri.parse('https://www.youtube.com/@$clean/playlists'));
+        urlsToTry.add(Uri.parse('https://www.youtube.com/channel/$clean/playlists'));
+      }
+
+      final playlistIds = <String>{};
+      for (final url in urlsToTry) {
+        try {
+          final res = await http.get(url, headers: {
+            'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+          });
+          if (res.statusCode == 200) {
+            final matches = RegExp(r'"playlistId":"(PL[a-zA-Z0-9_-]+)"').allMatches(res.body);
+            for (final m in matches) {
+              final id = m.group(1);
+              if (id != null && !id.startsWith('PL_') && id.length > 5) {
+                playlistIds.add(id);
+              }
+            }
+            if (playlistIds.isNotEmpty) break;
+          }
+        } catch (e) {
+          debugPrint('fetchPlaylists: Error scraping $url: $e');
+        }
+      }
+
+      final channelPlaylists = <UserPlaylist>[];
       final ytExplode = YoutubeExplode();
       try {
-        Channel? ch;
-        if (handle.startsWith('@')) {
-          ch = await ytExplode.channels.getByHandle(handle);
-        } else if (handle.startsWith('UC')) {
-          ch = await ytExplode.channels.get(handle);
-        } else {
+        for (final id in playlistIds.take(maxResults)) {
           try {
-            ch = await ytExplode.channels.getByHandle('@$handle');
-          } catch (_) {}
+            final pl = await ytExplode.playlists.get(id);
+            channelPlaylists.add(UserPlaylist(
+              id: id,
+              title: pl.title,
+              description: pl.description,
+              thumbnailUrl: pl.thumbnails.highResUrl.isNotEmpty
+                  ? pl.thumbnails.highResUrl
+                  : (pl.thumbnails.mediumResUrl.isNotEmpty
+                      ? pl.thumbnails.mediumResUrl
+                      : pl.thumbnails.lowResUrl),
+              videoCount: pl.videoCount ?? 0,
+            ));
+          } catch (e) {
+            debugPrint('fetchPlaylists: Error fetching playlist $id: $e');
+          }
         }
+      } finally {
+        ytExplode.close();
+      }
 
-        final targetId = ch?.id.value ?? handle;
-        final channelPlaylists = <UserPlaylist>[];
-        final yt = await YTMusic.create();
-
-        // 1. Try browsing channel user object
+      // Also try YTMusic getUser if playlistIds was empty
+      if (channelPlaylists.isEmpty) {
         try {
-          final userObj = await yt.getUser(targetId);
+          final yt = await YTMusic.create();
+          final userObj = await yt.getUser(clean);
           final playlistsObj = userObj['playlists'];
           if (playlistsObj is Map && playlistsObj['results'] is List) {
             for (final p in (playlistsObj['results'] as List).take(maxResults)) {
@@ -1022,7 +1155,7 @@ class GoogleAuthService extends ChangeNotifier {
                 thumbUrl = thumbs.last['url']?.toString() ?? '';
               }
               final count = int.tryParse(p['count']?.toString() ?? p['itemCount']?.toString() ?? '') ?? 0;
-              if (pid.isNotEmpty) {
+              if (pid.isNotEmpty && !channelPlaylists.any((x) => x.id == pid)) {
                 channelPlaylists.add(UserPlaylist(
                   id: pid,
                   title: title,
@@ -1036,45 +1169,12 @@ class GoogleAuthService extends ChangeNotifier {
         } catch (e) {
           debugPrint('getUser playlists InnerTube: $e');
         }
+      }
 
-        // 2. Search fallback for playlists under handle / user name
-        if (channelPlaylists.isEmpty) {
-          try {
-            final searchResults = await yt.search(handle, filter: SearchFilterType.playlists);
-            for (final p in searchResults.take(maxResults)) {
-              if (p is! Map) continue;
-              final pid = p['playlistId']?.toString() ?? p['browseId']?.toString() ?? '';
-              final title = p['title']?.toString() ?? 'Playlist';
-              final thumbs = p['thumbnails'];
-              String thumbUrl = '';
-              if (thumbs is List && thumbs.isNotEmpty) {
-                thumbUrl = thumbs.last['url']?.toString() ?? '';
-              }
-              final count = int.tryParse(p['itemCount']?.toString() ?? '') ?? 0;
-              if (pid.isNotEmpty) {
-                channelPlaylists.add(UserPlaylist(
-                  id: pid,
-                  title: title,
-                  description: p['author']?.toString() ?? '',
-                  thumbnailUrl: thumbUrl,
-                  videoCount: count,
-                ));
-              }
-            }
-          } catch (e) {
-            debugPrint('search playlists fallback InnerTube: $e');
-          }
-        }
-
-        if (channelPlaylists.isNotEmpty) {
-          debugPrint(
-              'fetchPlaylists (InnerTube): Loaded ${channelPlaylists.length} playlists');
-          return channelPlaylists;
-        }
-      } catch (e) {
-        debugPrint('fetchPlaylists InnerTube error: $e');
-      } finally {
-        ytExplode.close();
+      if (channelPlaylists.isNotEmpty) {
+        debugPrint(
+            'fetchPlaylists (Channel Scraper): Loaded ${channelPlaylists.length} playlists for $handle');
+        return channelPlaylists;
       }
     }
 
@@ -1574,13 +1674,45 @@ class GoogleAuthService extends ChangeNotifier {
         ));
       }
 
-      debugPrint(
-          'fetchPlaylistVideos returned ${videos.length} videos from $playlistId');
-      return videos;
+      if (videos.isNotEmpty) {
+        debugPrint(
+            'fetchPlaylistVideos returned ${videos.length} videos from $playlistId');
+        return videos;
+      }
     } catch (e) {
-      debugPrint('fetchPlaylistVideos error: $e');
-      rethrow;
+      debugPrint('fetchPlaylistVideos YTMusic error: $e');
     }
+
+    // Fallback: fetch via YoutubeExplode
+    final ytExplode = YoutubeExplode();
+    try {
+      final vids = await ytExplode.playlists.getVideos(playlistId).take(maxResults).toList();
+      final videos = <PlaylistVideo>[];
+      for (final v in vids) {
+        videos.add(PlaylistVideo(
+          videoId: v.id.value,
+          title: v.title,
+          channelTitle: v.author,
+          thumbnailUrl: v.thumbnails.highResUrl.isNotEmpty
+              ? v.thumbnails.highResUrl
+              : (v.thumbnails.mediumResUrl.isNotEmpty
+                  ? v.thumbnails.mediumResUrl
+                  : 'https://img.youtube.com/vi/${v.id.value}/hqdefault.jpg'),
+          duration: v.duration ?? Duration.zero,
+        ));
+      }
+      if (videos.isNotEmpty) {
+        debugPrint(
+            'fetchPlaylistVideos (YoutubeExplode): Loaded ${videos.length} videos from $playlistId');
+        return videos;
+      }
+    } catch (e) {
+      debugPrint('fetchPlaylistVideos YoutubeExplode fallback error: $e');
+    } finally {
+      ytExplode.close();
+    }
+
+    return <PlaylistVideo>[];
   }
 
   /// Spotify-style unified search returning Top Result, songs, artists, albums, and playlists.
