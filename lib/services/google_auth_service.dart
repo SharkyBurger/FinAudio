@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -518,12 +519,19 @@ class GoogleAuthService extends ChangeNotifier {
         List<int>.generate(16, (i) => Random.secure().nextInt(256)),
       );
 
+      // PKCE (Proof Key for Code Exchange) - standard for Desktop / Native clients
+      final verifierBytes = List<int>.generate(32, (i) => Random.secure().nextInt(256));
+      final codeVerifier = base64UrlEncode(verifierBytes).replaceAll('=', '');
+      final codeChallenge = base64UrlEncode(sha256.convert(utf8.encode(codeVerifier)).bytes).replaceAll('=', '');
+
       final authUri = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
         'client_id': serverClientId,
         'redirect_uri': redirectUri,
-        'response_type': 'token',
+        'response_type': 'code',
         'scope': 'openid email profile',
         'state': state,
+        'code_challenge': codeChallenge,
+        'code_challenge_method': 'S256',
       });
 
       debugPrint('GoogleAuthService: Starting desktop WebAuth server on $redirectUri');
@@ -670,24 +678,26 @@ class GoogleAuthService extends ChangeNotifier {
       String accessToken = resultToken;
       if (accessToken.startsWith('code:')) {
         final code = accessToken.substring(5);
-        try {
-          final res = await http.post(
-            Uri.parse('https://oauth2.googleapis.com/token'),
-            body: {
-              'client_id': serverClientId,
-              'redirect_uri': redirectUri,
-              'code': code,
-              'grant_type': 'authorization_code',
-            },
-          );
-          if (res.statusCode == 200) {
-            final data = jsonDecode(res.body);
-            if (data['access_token'] != null) {
-              accessToken = data['access_token'] as String;
-            }
+        final tokenRes = await http.post(
+          Uri.parse('https://oauth2.googleapis.com/token'),
+          body: {
+            'client_id': serverClientId,
+            'redirect_uri': redirectUri,
+            'code': code,
+            'code_verifier': codeVerifier,
+            'grant_type': 'authorization_code',
+          },
+        );
+        if (tokenRes.statusCode == 200) {
+          final data = jsonDecode(tokenRes.body);
+          if (data['access_token'] != null) {
+            accessToken = data['access_token'] as String;
+          } else {
+            throw Exception('Token response missing access_token.');
           }
-        } catch (exchangeErr) {
-          debugPrint('GoogleAuthService: Code exchange note: $exchangeErr');
+        } else {
+          debugPrint('GoogleAuthService: Token exchange failed (${tokenRes.statusCode}): ${tokenRes.body}');
+          throw Exception('Failed to exchange authorization code (${tokenRes.statusCode}): ${tokenRes.body}');
         }
       }
 
