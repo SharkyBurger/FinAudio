@@ -24,7 +24,7 @@ dependencies:
   ytmusicapi_dart: ^2.4.1
   cached_network_image: ^3.4.1
   shimmer: ^3.0.0
-  connectivity_plus: ^7.3.2
+  connectivity_plus: ^6.1.1
   path_provider: ^2.1.2
   dart_discord_presence: ^1.2.1
   webview_flutter: ^4.10.0
