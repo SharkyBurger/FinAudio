@@ -1,7 +1,7 @@
 name: finaudio
 description: "Ad-free YouTube audio player with Google playlist sync."
 publish_to: 'none'
-version: 1.0.0+1
+version: 0.3.1+1
 
 environment:
   sdk: ^3.13.0
@@ -15,14 +15,19 @@ dependencies:
   media_kit: ^1.2.6
   media_kit_libs_audio: ^1.0.7
   google_sign_in: ^7.2.0
-  googleapis: ^17.0.0
-  googleapis_auth: ^2.3.3
-  extension_google_sign_in_as_googleapis_auth: ^3.0.0
   rxdart: ^0.28.0
   http: ^1.2.0
   shared_preferences: ^2.3.3
   flutter_colorpicker: ^1.1.0
-
+  youtube_player_iframe: ^6.0.2
+  audio_service: ^0.18.19
+  ytmusicapi_dart: ^2.4.1
+  cached_network_image: ^3.4.1
+  shimmer: ^3.0.0
+  connectivity_plus: ^7.3.2
+  path_provider: ^2.1.2
+  dart_discord_presence: ^1.2.1
+  webview_flutter: ^4.10.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

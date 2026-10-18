@@ -1,4 +1,4 @@
-# Paste this prompt at the start of a new session to restore full context
+r# Paste this prompt at the start of a new session to restore full context
 
 I'm building a Flutter app called **FinAudio** at path: `C:\Users\Ethan John\Documents\FinAudio\finaudio`
 

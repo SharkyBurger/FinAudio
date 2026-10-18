@@ -1,0 +1,42 @@
+name: Build iOS IPA for Sideloading
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-ipa:
+    name: Build iOS IPA
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter Environment
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Flutter Packages
+        run: flutter pub get
+
+      - name: Build iOS Application (Release, Unsigned)
+        run: |
+          flutter build ios --release --no-codesign
+
+      - name: Package Payload into .ipa for Sideloadly
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r FinAudio.ipa Payload
+          rm -rf Payload
+
+      - name: Upload FinAudio.ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FinAudio-iOS
+          path: FinAudio.ipa
+          retention-days: 14
+
