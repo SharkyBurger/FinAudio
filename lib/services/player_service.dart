@@ -122,7 +122,7 @@ class Track {
       author: author,
       youtubeUrl: 'https://www.youtube.com/watch?v=$videoId',
       duration: duration,
-      thumbnailUrl: thumbnailUrl,
+      thumbnailUrl: thumbnailUrl ?? 'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
     );
   }
 
@@ -141,13 +141,14 @@ class Track {
   factory Track.fromLocalPlaylistTrack(LocalPlaylistTrack track) {
     final hasYtId = track.youtubeVideoId != null && track.youtubeVideoId!.isNotEmpty;
     final id = hasYtId ? track.youtubeVideoId! : (track.spotifyUri ?? 'track_${track.title.hashCode}');
+    final defaultThumb = hasYtId ? 'https://img.youtube.com/vi/${track.youtubeVideoId}/hqdefault.jpg' : null;
     return Track(
       id: id,
       title: track.title,
       author: track.artist,
       youtubeUrl: hasYtId ? 'https://www.youtube.com/watch?v=${track.youtubeVideoId}' : '',
       duration: track.duration,
-      thumbnailUrl: track.thumbnailUrl,
+      thumbnailUrl: track.thumbnailUrl ?? defaultThumb,
     );
   }
 
@@ -486,11 +487,13 @@ class PlayerService {
       String title = 'YouTube Track';
       String author = 'YouTube';
       Duration dur = Duration.zero;
+      String? thumbUrl;
       try {
         final video = await _yt.getVideoMetadata(videoId);
         title = video.title;
         author = video.author;
         dur = video.duration ?? Duration.zero;
+        thumbUrl = video.thumbnails.highResUrl;
       } catch (_) {}
 
       track = Track(
@@ -499,6 +502,7 @@ class PlayerService {
         author: author,
         youtubeUrl: 'https://www.youtube.com/watch?v=$videoId',
         duration: dur,
+        thumbnailUrl: thumbUrl ?? 'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
       );
     } else {
       final searchResults = await _yt.search(trimmed);
@@ -512,6 +516,9 @@ class PlayerService {
         author: first.author,
         youtubeUrl: first.url,
         duration: first.duration ?? Duration.zero,
+        thumbnailUrl: first.thumbnails.highResUrl.isNotEmpty
+            ? first.thumbnails.highResUrl
+            : 'https://img.youtube.com/vi/${first.id.value}/hqdefault.jpg',
       );
     }
 
@@ -598,7 +605,7 @@ class PlayerService {
 
   /// Queues videos from playlist metadata and starts playback.
   Future<void> playVideos(
-    List<({String videoId, String title, String author, Duration duration})>
+    List<({String videoId, String title, String author, Duration duration, String? thumbnailUrl})>
         videos, {
     int startIndex = 0,
   }) async {
@@ -609,6 +616,7 @@ class PlayerService {
               title: v.title,
               author: v.author,
               duration: v.duration,
+              thumbnailUrl: v.thumbnailUrl,
             ))
         .toList();
     await _enqueueAndPlay(tracks, startIndex: startIndex, replaceQueue: true);

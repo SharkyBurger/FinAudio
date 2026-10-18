@@ -476,8 +476,10 @@ class _DiscordDesktopClient {
           : null,
       largeAsset: hasThumbnail
           ? DiscordAsset.fromUrl(publicThumb, text: track.title)
+          : const DiscordAsset.fromUrl(DiscordRpcService.appIconFallbackUrl, text: 'FinAudio'),
+      smallAsset: hasThumbnail
+          ? const DiscordAsset.fromUrl(DiscordRpcService.appIconFallbackUrl, text: 'FinAudio')
           : null,
-      smallAsset: null, // Avoid small asset URL to prevent broken dice placeholder badge
       statusDisplayType: DiscordStatusDisplayType.name,
       buttons: (_lastShowButtons && track.youtubeUrl.isNotEmpty)
           ? [DiscordButton(label: 'Listen on YouTube', url: track.youtubeUrl)]
@@ -745,8 +747,10 @@ class _DiscordGatewayClient {
     final cachedProxy = hasThumbnail ? _assetCache[publicThumb] : null;
 
     final appIconProxy = _assetCache[DiscordRpcService.appIconUrl] ??
-        _assetCache[DiscordRpcService.appIconFallbackUrl];
-    final largeImage = cachedProxy ?? appIconProxy;
+        _assetCache[DiscordRpcService.appIconFallbackUrl] ??
+        DiscordRpcService.appIconFallbackUrl;
+    final largeImage = cachedProxy ?? (hasThumbnail ? publicThumb : appIconProxy);
+    final smallImage = hasThumbnail ? appIconProxy : null;
 
     final Map<String, dynamic> activity = {
       'name': 'FinAudio',
@@ -756,11 +760,16 @@ class _DiscordGatewayClient {
       'application_id': appId,
     };
 
-    if (largeImage != null && largeImage.isNotEmpty) {
-      activity['assets'] = {
+    if (largeImage.isNotEmpty) {
+      final assets = <String, dynamic>{
         'large_image': largeImage,
         'large_text': track.title,
       };
+      if (smallImage != null && smallImage.isNotEmpty) {
+        assets['small_image'] = smallImage;
+        assets['small_text'] = 'FinAudio';
+      }
+      activity['assets'] = assets;
     }
 
     if (_lastShowTimestamps && totalDur.inMilliseconds > 0) {

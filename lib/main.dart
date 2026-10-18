@@ -2069,6 +2069,7 @@ class _SearchTabState extends State<SearchTab> {
           title: v.title,
           author: v.channelTitle,
           duration: v.duration,
+          thumbnailUrl: v.thumbnailUrl,
         )).toList(),
         startIndex: index >= 0 ? index : 0,
       );
@@ -2102,6 +2103,7 @@ class _SearchTabState extends State<SearchTab> {
           title: v.title,
           author: v.channelTitle,
           duration: v.duration,
+          thumbnailUrl: v.thumbnailUrl,
         )).toList(),
       );
     } catch (e) {
@@ -2145,6 +2147,7 @@ class _SearchTabState extends State<SearchTab> {
             title: v.title,
             author: v.channelTitle,
             duration: v.duration,
+            thumbnailUrl: v.thumbnailUrl,
           )).toList(),
         );
       } else {
@@ -2157,6 +2160,7 @@ class _SearchTabState extends State<SearchTab> {
               title: v.title,
               author: v.author,
               duration: v.duration ?? Duration.zero,
+              thumbnailUrl: v.thumbnails.highResUrl,
             )).toList(),
           );
         }
@@ -2185,6 +2189,7 @@ class _SearchTabState extends State<SearchTab> {
             title: v.title,
             author: v.channelTitle,
             duration: v.duration,
+            thumbnailUrl: v.thumbnailUrl,
           )).toList(),
         );
       }
@@ -6297,6 +6302,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
           title: v.title,
           author: v.channelTitle,
           duration: v.duration,
+          thumbnailUrl: v.thumbnailUrl,
         )).toList(),
         startIndex: index >= 0 ? index : 0,
       );
@@ -6330,6 +6336,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
           title: v.title,
           author: v.channelTitle,
           duration: v.duration,
+          thumbnailUrl: v.thumbnailUrl,
         )).toList(),
       );
     } catch (e) {
