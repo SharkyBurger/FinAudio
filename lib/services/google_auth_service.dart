@@ -504,8 +504,26 @@ class GoogleAuthService extends ChangeNotifier {
       bool launched = false;
       try {
         if (!kIsWeb && Platform.isWindows) {
-          await Process.run('cmd', ['/c', 'start', '', authUri.toString()]);
-          launched = true;
+          try {
+            final res = await Process.run('rundll32', ['url.dll,FileProtocolHandler', authUri.toString()]);
+            if (res.exitCode == 0) launched = true;
+          } catch (_) {}
+          if (!launched) {
+            try {
+              final res = await Process.run('powershell', [
+                '-NoProfile',
+                '-NonInteractive',
+                '-Command',
+                'Start-Process',
+                '"${authUri.toString().replaceAll('"', '`"')}"'
+              ]);
+              if (res.exitCode == 0) launched = true;
+            } catch (_) {}
+          }
+          if (!launched) {
+            await Process.run('cmd', ['/c', 'start', '""', '"${authUri.toString().replaceAll('"', '')}"']);
+            launched = true;
+          }
         } else if (!kIsWeb && Platform.isMacOS) {
           await Process.run('open', [authUri.toString()]);
           launched = true;

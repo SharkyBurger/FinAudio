@@ -60,8 +60,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         title: const Text('Settings'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 880),
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         children: [
           _SectionHeader(title: 'Google Account'),
           const SizedBox(height: 12),
@@ -130,11 +134,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _SectionHeader(title: 'Diagnostics & Logs'),
           const SizedBox(height: 12),
           _CrashLogsTile(accentColor: accentColor),
-          const SizedBox(height: 24),
-        ],
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _SectionHeader extends StatelessWidget {

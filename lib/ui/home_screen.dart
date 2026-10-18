@@ -2472,135 +2472,154 @@ class _HomeTabState extends State<HomeTab> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final itemWidth = (constraints.maxWidth - 16) / 3;
+              final isDesktop = constraints.maxWidth >= 600;
+              final columns = isDesktop ? (constraints.maxWidth / 175).floor().clamp(3, 8) : 3;
+              final spacing = isDesktop ? 12.0 : 8.0;
+              final itemWidth = (constraints.maxWidth - (columns - 1) * spacing) / columns;
               return Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: spacing,
+                runSpacing: spacing,
                 children: [
                   // 1. Liked Music tile
-                  GestureDetector(
-                    onTap: () => widget.onOpenPlaylistDetail(likedPlaylist),
-                    child: Container(
-                      width: itemWidth,
-                      height: itemWidth,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: Stack(
-                        children: [
-                          const Center(
-                            child: Icon(Icons.thumb_up_rounded, color: Colors.white, size: 36),
-                          ),
-                          Positioned(
-                            left: 8,
-                            right: 8,
-                            bottom: 8,
-                            child: Row(
-                              children: const [
-                                Expanded(
-                                  child: Text(
-                                    'Liked Music',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                Icon(Icons.chevron_right_rounded, color: Colors.white, size: 14),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // 2..8: Top listened items
-                  ...items.map((item) {
-                    return GestureDetector(
-                      onTap: () {
-                        if (item.onTap != null) {
-                          item.onTap!();
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Playing "${item.title}"')),
-                          );
-                        }
-                      },
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () => widget.onOpenPlaylistDetail(likedPlaylist),
                       child: Container(
                         width: itemWidth,
                         height: itemWidth,
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          color: surface,
-                          border: Border.all(color: text.withAlpha(20)),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            _buildYtmImage(
-                              imageUrl: item.coverUrl,
-                              width: itemWidth,
-                              height: itemWidth,
-                              borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF8B5CF6).withAlpha(35),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
                             ),
-                            Container(
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [Colors.transparent, Color(0xCC000000)],
-                                ),
-                              ),
+                          ],
+                        ),
+                        child: Stack(
+                          children: [
+                            const Center(
+                              child: Icon(Icons.thumb_up_rounded, color: Colors.white, size: 36),
                             ),
                             Positioned(
-                              left: 6,
-                              right: 6,
-                              bottom: 6,
+                              left: 8,
+                              right: 8,
+                              bottom: 8,
                               child: Row(
-                                children: [
+                                children: const [
                                   Expanded(
                                     child: Text(
-                                      item.title,
+                                      'Liked Music',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: Colors.white,
-                                        fontSize: 11,
+                                        fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ),
-                                  const Icon(Icons.chevron_right_rounded, color: Colors.white70, size: 14),
+                                  Icon(Icons.chevron_right_rounded, color: Colors.white, size: 14),
                                 ],
                               ),
                             ),
                           ],
                         ),
                       ),
+                    ),
+                  ),
+
+                  // 2..8: Top listened items
+                  ...items.map((item) {
+                    return MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        onTap: () {
+                          if (item.onTap != null) {
+                            item.onTap!();
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Playing "${item.title}"')),
+                            );
+                          }
+                        },
+                        child: Container(
+                          width: itemWidth,
+                          height: itemWidth,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            color: surface,
+                            border: Border.all(color: text.withAlpha(20)),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              _buildYtmImage(
+                                imageUrl: item.coverUrl,
+                                width: itemWidth,
+                                height: itemWidth,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              Container(
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.transparent, Color(0xCC000000)],
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                left: 8,
+                                right: 8,
+                                bottom: 8,
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        item.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(Icons.chevron_right_rounded, color: Colors.white70, size: 14),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     );
                   }),
 
                   // 9. More tile
-                  Container(
-                    width: itemWidth,
-                    height: itemWidth,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      color: surface,
-                      border: Border.all(color: text.withAlpha(20)),
-                    ),
-                    child: Center(
-                      child: Icon(Icons.more_horiz_rounded, color: text.withAlpha(120), size: 28),
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Container(
+                      width: itemWidth,
+                      height: itemWidth,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        color: surface,
+                        border: Border.all(color: text.withAlpha(20)),
+                      ),
+                      child: Center(
+                        child: Icon(Icons.more_horiz_rounded, color: text.withAlpha(120), size: 28),
+                      ),
                     ),
                   ),
                 ],

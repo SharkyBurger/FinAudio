@@ -1179,8 +1179,8 @@ class AlbumsDetailScreen extends StatelessWidget {
       ),
       body: GridView.builder(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 210,
           crossAxisSpacing: 14,
           mainAxisSpacing: 16,
           childAspectRatio: 0.78,
@@ -1300,8 +1300,8 @@ class ArtistsDetailScreen extends StatelessWidget {
       ),
       body: GridView.builder(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 160,
           crossAxisSpacing: 12,
           mainAxisSpacing: 16,
           childAspectRatio: 0.76,

@@ -369,100 +369,114 @@ class _LibraryTabState extends State<LibraryTab> with SingleTickerProviderStateM
 
     return CustomScrollView(
       slivers: [
-        // 2-Column Grid of rounded cards (Liked songs, Offline, Cached, Local Files, My top 50)
+        // Responsive Grid of rounded cards (Liked songs, Offline, Cached, Local Files, My top 50)
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          sliver: SliverGrid.count(
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1.35,
-            children: [
-              // 1. Liked songs
-              _buildLibraryGridCard(
-                icon: Icons.favorite_rounded,
-                iconColor: const Color(0xFFFF5252),
-                iconBgColor: const Color(0xFFFF5252).withAlpha(35),
-                title: 'Liked songs',
-                subtitle: likedTrackCount,
-                surface: surface,
-                text: text,
-                onTap: () {
-                  widget.onOpenPlaylistDetail?.call(likedPlaylist);
-                },
-              ),
+          sliver: SliverLayoutBuilder(
+            builder: (context, constraints) {
+              final isDesktop = constraints.crossAxisExtent >= 600;
+              final crossAxisCount = isDesktop ? (constraints.crossAxisExtent / 220).floor().clamp(3, 6) : 2;
+              final childAspectRatio = isDesktop ? 2.5 : 1.35;
+              return SliverGrid(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: childAspectRatio,
+                ),
+                delegate: SliverChildListDelegate([
+                  // 1. Liked songs
+                  _buildLibraryGridCard(
+                    icon: Icons.favorite_rounded,
+                    iconColor: const Color(0xFFFF5252),
+                    iconBgColor: const Color(0xFFFF5252).withAlpha(35),
+                    title: 'Liked songs',
+                    subtitle: likedTrackCount,
+                    surface: surface,
+                    text: text,
+                    isDesktop: isDesktop,
+                    onTap: () {
+                      widget.onOpenPlaylistDetail?.call(likedPlaylist);
+                    },
+                  ),
 
-              // 2. Offline
-              _buildLibraryGridCard(
-                icon: Icons.check_circle_outline_rounded,
-                iconColor: const Color(0xFF00E676),
-                iconBgColor: const Color(0xFF00E676).withAlpha(35),
-                title: 'Offline',
-                subtitle: DownloadService.instance.downloadedCount > 0
-                    ? '${DownloadService.instance.downloadedCount} songs'
-                    : 'Downloaded',
-                surface: surface,
-                text: text,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => DownloadsScreen(
-                        playerService: widget.playerService,
-                        settingsService: widget.settingsService,
-                      ),
-                    ),
-                  );
-                },
-              ),
+                  // 2. Offline
+                  _buildLibraryGridCard(
+                    icon: Icons.check_circle_outline_rounded,
+                    iconColor: const Color(0xFF00E676),
+                    iconBgColor: const Color(0xFF00E676).withAlpha(35),
+                    title: 'Offline',
+                    subtitle: DownloadService.instance.downloadedCount > 0
+                        ? '${DownloadService.instance.downloadedCount} songs'
+                        : 'Downloaded',
+                    surface: surface,
+                    text: text,
+                    isDesktop: isDesktop,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DownloadsScreen(
+                            playerService: widget.playerService,
+                            settingsService: widget.settingsService,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
 
-              // 3. Cached
-              _buildLibraryGridCard(
-                icon: Icons.cached_rounded,
-                iconColor: const Color(0xFF00B0FF),
-                iconBgColor: const Color(0xFF00B0FF).withAlpha(35),
-                title: 'Cached',
-                subtitle: HistoryService.instance.items.isNotEmpty
-                    ? '${HistoryService.instance.items.length} songs'
-                    : 'Instant playback',
-                surface: surface,
-                text: text,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => CachedScreen(
-                        playerService: widget.playerService,
-                        playlistService: widget.playlistService,
-                        settingsService: widget.settingsService,
-                      ),
-                    ),
-                  );
-                },
-              ),
+                  // 3. Cached
+                  _buildLibraryGridCard(
+                    icon: Icons.cached_rounded,
+                    iconColor: const Color(0xFF00B0FF),
+                    iconBgColor: const Color(0xFF00B0FF).withAlpha(35),
+                    title: 'Cached',
+                    subtitle: HistoryService.instance.items.isNotEmpty
+                        ? '${HistoryService.instance.items.length} songs'
+                        : 'Instant playback',
+                    surface: surface,
+                    text: text,
+                    isDesktop: isDesktop,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => CachedScreen(
+                            playerService: widget.playerService,
+                            playlistService: widget.playlistService,
+                            settingsService: widget.settingsService,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
 
-              // 4. Local Files
-              _buildLibraryGridCard(
-                icon: Icons.folder_open_rounded,
-                iconColor: const Color(0xFFFF9800),
-                iconBgColor: const Color(0xFFFF9800).withAlpha(35),
-                title: 'Local Files',
-                subtitle: 'On device',
-                surface: surface,
-                text: text,
-                onTap: () => _showLocalFilesSheet(accent, surface, text),
-              ),
+                  // 4. Local Files
+                  _buildLibraryGridCard(
+                    icon: Icons.folder_open_rounded,
+                    iconColor: const Color(0xFFFF9800),
+                    iconBgColor: const Color(0xFFFF9800).withAlpha(35),
+                    title: 'Local Files',
+                    subtitle: 'On device',
+                    surface: surface,
+                    text: text,
+                    isDesktop: isDesktop,
+                    onTap: () => _showLocalFilesSheet(accent, surface, text),
+                  ),
 
-              // 5. My top 50
-              _buildLibraryGridCard(
-                icon: Icons.trending_up_rounded,
-                iconColor: const Color(0xFFAB47BC),
-                iconBgColor: const Color(0xFFAB47BC).withAlpha(35),
-                title: 'My top 50',
-                subtitle: 'All time',
-                surface: surface,
-                text: text,
-                onTap: () => _showTop50Sheet(accent, surface, text),
-              ),
-            ],
+                  // 5. My top 50
+                  _buildLibraryGridCard(
+                    icon: Icons.trending_up_rounded,
+                    iconColor: const Color(0xFFAB47BC),
+                    iconBgColor: const Color(0xFFAB47BC).withAlpha(35),
+                    title: 'My top 50',
+                    subtitle: 'All time',
+                    surface: surface,
+                    text: text,
+                    isDesktop: isDesktop,
+                    onTap: () => _showTop50Sheet(accent, surface, text),
+                  ),
+                ]),
+              );
+            },
           ),
         ),
 
@@ -690,54 +704,104 @@ class _LibraryTabState extends State<LibraryTab> with SingleTickerProviderStateM
     required Color surface,
     required Color text,
     required VoidCallback onTap,
+    bool isDesktop = false,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: text.withAlpha(15)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: iconBgColor,
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Icon(icon, color: iconColor, size: 20),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: text,
-                letterSpacing: -0.2,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11,
-                color: text.withAlpha(140),
-              ),
-            ),
-          ],
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: isDesktop ? 16 : 14, vertical: isDesktop ? 12 : 14),
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: text.withAlpha(20)),
+          ),
+          child: isDesktop
+              ? Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: iconBgColor,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: Icon(icon, color: iconColor, size: 22),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: text,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: text.withAlpha(140),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: iconBgColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Icon(icon, color: iconColor, size: 20),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: text,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: text.withAlpha(140),
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -891,8 +955,8 @@ class _LibraryTabState extends State<LibraryTab> with SingleTickerProviderStateM
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
             sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 210,
                 mainAxisSpacing: 14,
                 crossAxisSpacing: 14,
                 childAspectRatio: 0.82,
@@ -949,8 +1013,8 @@ class _LibraryTabState extends State<LibraryTab> with SingleTickerProviderStateM
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 210,
                   mainAxisSpacing: 14,
                   crossAxisSpacing: 14,
                   childAspectRatio: 0.82,
@@ -2110,8 +2174,8 @@ class _LibraryTabState extends State<LibraryTab> with SingleTickerProviderStateM
           child: filtered.isNotEmpty
               ? GridView.builder(
                   padding: const EdgeInsets.all(16),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 220,
                     mainAxisSpacing: 16,
                     crossAxisSpacing: 16,
                     childAspectRatio: 0.78,

@@ -2473,51 +2473,114 @@ class _SearchTabState extends State<SearchTab> {
   // ======================================================================
 
   Widget _buildAllCategoryView(ThemeData theme) {
+    final width = MediaQuery.of(context).size.width;
+    final isDesktop = width >= 900;
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
       children: [
-        // 1. Top Result Hero Card
-        if (_results.topResult != null) ...[
-          Text(
-            'Top result',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _buildTopResultCard(_results.topResult!, theme),
-          const SizedBox(height: 24),
-        ],
-
-        // 2. Songs Section (top 4 songs)
-        if (_results.songs.isNotEmpty) ...[
+        if (isDesktop && _results.topResult != null && _results.songs.isNotEmpty) ...[
+          // Desktop: Top Result and Songs side-by-side
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Songs',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+              SizedBox(
+                width: 360,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Top result',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildTopResultCard(_results.topResult!, theme),
+                  ],
                 ),
               ),
-              if (_results.songs.length > 4)
-                TextButton(
-                  onPressed: () {
-                    setState(() => _selectedCategory = 'Songs');
-                    _performSearch(_searchController.text, category: 'Songs');
-                  },
-                  child: Text(
-                    'See all',
-                    style: TextStyle(color: widget.accentColor, fontWeight: FontWeight.bold),
-                  ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Songs',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                        if (_results.songs.length > 4)
+                          TextButton(
+                            onPressed: () {
+                              setState(() => _selectedCategory = 'Songs');
+                              _performSearch(_searchController.text, category: 'Songs');
+                            },
+                            child: Text(
+                              'See all',
+                              style: TextStyle(color: widget.accentColor, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ..._results.songs.take(4).map((s) => _buildSongTile(s, theme)),
+                  ],
                 ),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          ..._results.songs.take(4).map((s) => _buildSongTile(s, theme)),
           const SizedBox(height: 24),
+        ] else ...[
+          // 1. Top Result Hero Card (Mobile or no songs)
+          if (_results.topResult != null) ...[
+            Text(
+              'Top result',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _buildTopResultCard(_results.topResult!, theme),
+            const SizedBox(height: 24),
+          ],
+
+          // 2. Songs Section (top 4 songs)
+          if (_results.songs.isNotEmpty) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Songs',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                if (_results.songs.length > 4)
+                  TextButton(
+                    onPressed: () {
+                      setState(() => _selectedCategory = 'Songs');
+                      _performSearch(_searchController.text, category: 'Songs');
+                    },
+                    child: Text(
+                      'See all',
+                      style: TextStyle(color: widget.accentColor, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ..._results.songs.take(4).map((s) => _buildSongTile(s, theme)),
+            const SizedBox(height: 24),
+          ],
         ],
 
         // 3. Artists Carousel
