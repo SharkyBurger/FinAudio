@@ -58,6 +58,29 @@ class DiscordRpcService {
   StreamSubscription? _durationSub;
   Timer? _keepAliveTimer;
 
+  /// Global asset cache of external image URLs to Discord media proxy paths ("mp:external/...").
+  /// Shared across Desktop IPC and Mobile Gateway engines.
+  final Map<String, String> _assetCache = {};
+  final Set<String> _pendingAssetFetches = {};
+
+  /// Flag indicating that a track transition is in progress.
+  /// When true, temporary isPlaying=false events (from audio stream resets)
+  /// will NOT clear the Discord presence.
+  bool _isSwitchingTrack = false;
+
+  /// Debounce timer for pausing. When playback is paused (and not switching tracks),
+  /// wait 2.5 seconds before clearing presence so brief pause/resumes don't flicker.
+  Timer? _clearDebounceTimer;
+
+  /// Coalescing throttle timer to respect Discord's SET_ACTIVITY rate-limit (~1 update per second).
+  Timer? _throttleTimer;
+  DateTime? _lastSendTime;
+
+  Track? _pendingTrack;
+  bool _pendingIsPlaying = false;
+  Duration _pendingPosition = Duration.zero;
+  Duration? _pendingDuration;
+
   Track? _lastTrack;
   bool _lastIsPlaying = false;
   Duration _lastPosition = Duration.zero;
@@ -113,6 +136,85 @@ class DiscordRpcService {
     return null;
   }
 
+  /// Resolves an external HTTP/HTTPS image URL into a Discord CDN proxy path ("mp:external/...").
+  /// Works across both Windows Desktop and Mobile Gateway using the configured Discord token.
+  Future<void> resolveAsset(String url) async {
+    if (url.isEmpty || _pendingAssetFetches.contains(url) || _assetCache.containsKey(url)) return;
+    _pendingAssetFetches.add(url);
+
+    try {
+      final token = _settings?.discordToken;
+      final appId = _settings?.discordAppId.isNotEmpty == true
+          ? _settings!.discordAppId
+          : defaultAppId;
+
+      if (token == null || token.isEmpty) return;
+
+      final rawToken = token.startsWith('Bearer ')
+          ? token.substring(7)
+          : (token.startsWith('Bot ') ? token.substring(4) : token);
+
+      final authCandidates = <String>[rawToken, 'Bearer $rawToken'];
+      final apiUrl = Uri.parse('https://discord.com/api/v10/applications/$appId/external-assets');
+      final requestBody = jsonEncode({'urls': [url]});
+
+      for (final authHeader in authCandidates) {
+        try {
+          final res = await http.post(
+            apiUrl,
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': 'application/json',
+            },
+            body: requestBody,
+          ).timeout(const Duration(seconds: 8));
+
+          if (res.statusCode == 200) {
+            final list = jsonDecode(res.body) as List<dynamic>;
+            if (list.isNotEmpty) {
+              final item = list.first as Map<String, dynamic>;
+              final path = item['external_asset_path'] as String?;
+              if (path != null && path.isNotEmpty) {
+                _assetCache[url] = 'mp:$path';
+                if (kDebugMode) {
+                  print('[DiscordRPC] Resolved asset: $url -> mp:$path');
+                }
+                // Refresh presence if this asset is for the currently playing track or app icon
+                if (_lastIsPlaying && _lastTrack != null &&
+                    (_lastTrack?.publicThumbnailUrl == url ||
+                     url == appIconUrl ||
+                     url == appIconFallbackUrl)) {
+                  _schedulePresenceUpdate(
+                    track: _lastTrack!,
+                    isPlaying: true,
+                    position: _lastPosition,
+                    duration: _lastDuration,
+                  );
+                }
+                return;
+              }
+            }
+            break;
+          } else if (res.statusCode == 401 || res.statusCode == 403) {
+            continue;
+          } else {
+            break;
+          }
+        } on TimeoutException {
+          break;
+        } catch (_) {
+          continue;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('[DiscordRPC] resolveAsset error for $url: $e');
+      }
+    } finally {
+      _pendingAssetFetches.remove(url);
+    }
+  }
+
   /// Attaches to the active [PlayerService] and [SettingsService] instances.
   void attach({
     required PlayerService playerService,
@@ -140,11 +242,12 @@ class DiscordRpcService {
     _initEngines();
 
     if (_lastTrack != null && _lastIsPlaying) {
-      updatePresence(
-        track: _lastTrack,
+      _schedulePresenceUpdate(
+        track: _lastTrack!,
         isPlaying: true,
         position: _lastPosition,
         duration: _lastDuration,
+        immediate: true,
       );
     }
   }
@@ -156,6 +259,10 @@ class DiscordRpcService {
     final appId = _settings?.discordAppId.isNotEmpty == true
         ? _settings!.discordAppId
         : defaultAppId;
+
+    // Pre-resolve FinAudio application icons
+    resolveAsset(appIconUrl);
+    resolveAsset(appIconFallbackUrl);
 
     // Desktop Native IPC Engine
     if (DiscordRPC.isAvailable) {
@@ -196,15 +303,32 @@ class DiscordRpcService {
     _durationSub?.cancel();
 
     _nowPlayingSub = _playerService?.nowPlayingStream.listen((track) {
-      _lastTrack = track;
       if (track == null) {
+        _isSwitchingTrack = false;
+        _lastTrack = null;
+        _clearDebounceTimer?.cancel();
+        _clearDebounceTimer = null;
+        _throttleTimer?.cancel();
+        _throttleTimer = null;
         clearPresence();
       } else {
-        updatePresence(
+        _clearDebounceTimer?.cancel();
+        _clearDebounceTimer = null;
+        _isSwitchingTrack = true;
+        _lastTrack = track;
+
+        final thumb = track.publicThumbnailUrl;
+        if (thumb != null && thumb.isNotEmpty) {
+          resolveAsset(thumb);
+        }
+
+        // Send an immediate optimistic update so Discord switches song instantly
+        _schedulePresenceUpdate(
           track: track,
-          isPlaying: _playerService?.isPlaying ?? false,
-          position: _playerService?.position ?? Duration.zero,
-          duration: _playerService?.duration,
+          isPlaying: true,
+          position: Duration.zero,
+          duration: _playerService?.duration ?? track.duration,
+          immediate: true,
         );
       }
     });
@@ -212,15 +336,28 @@ class DiscordRpcService {
     _playingSub = _playerService?.playingStream.listen((isPlaying) {
       _lastIsPlaying = isPlaying;
       if (!isPlaying) {
-        // Spotify behavior: presence disappears completely when playback is paused
-        clearPresence();
+        // If we are currently transitioning to a new song, DO NOT clear presence!
+        if (_isSwitchingTrack) return;
+
+        // User paused playback: wait 2.5 seconds before removing from Discord (Spotify behavior)
+        _clearDebounceTimer?.cancel();
+        _clearDebounceTimer = Timer(const Duration(milliseconds: 2500), () {
+          _clearDebounceTimer = null;
+          if (!(_playerService?.isPlaying ?? false)) {
+            _throttleTimer?.cancel();
+            _throttleTimer = null;
+            clearPresence();
+          }
+        });
       } else if (_lastTrack != null) {
-        // Spotify behavior: presence reappears when playback is resumed
-        updatePresence(
-          track: _lastTrack,
+        _isSwitchingTrack = false;
+        _clearDebounceTimer?.cancel();
+        _clearDebounceTimer = null;
+        _schedulePresenceUpdate(
+          track: _lastTrack!,
           isPlaying: true,
           position: _playerService?.position ?? Duration.zero,
-          duration: _playerService?.duration,
+          duration: _playerService?.duration ?? _lastDuration,
         );
       }
     });
@@ -228,9 +365,9 @@ class DiscordRpcService {
     _durationSub = _playerService?.durationStream.listen((dur) {
       if (_lastTrack != null && dur > Duration.zero) {
         _lastDuration = dur;
-        if (_lastIsPlaying) {
-          updatePresence(
-            track: _lastTrack,
+        if (_lastIsPlaying || _isSwitchingTrack) {
+          _schedulePresenceUpdate(
+            track: _lastTrack!,
             isPlaying: true,
             position: _playerService?.position ?? Duration.zero,
             duration: dur,
@@ -243,10 +380,9 @@ class DiscordRpcService {
     _positionSub = _playerService?.positionStream.listen((pos) {
       final diff = (pos.inSeconds - _lastPosition.inSeconds).abs();
       _lastPosition = pos;
-      // If position jumped significantly (user seeked), update presence
-      if (diff >= 3 && _lastTrack != null && _lastIsPlaying) {
-        updatePresence(
-          track: _lastTrack,
+      if (diff >= 3 && _lastTrack != null && (_lastIsPlaying || _isSwitchingTrack)) {
+        _schedulePresenceUpdate(
+          track: _lastTrack!,
           isPlaying: true,
           position: pos,
           duration: _playerService?.duration ?? _lastDuration,
@@ -257,14 +393,110 @@ class DiscordRpcService {
     _keepAliveTimer?.cancel();
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 25), (_) {
       if (_lastIsPlaying && _lastTrack != null && (_settings?.discordRpcEnabled ?? true)) {
-        updatePresence(
-          track: _lastTrack,
+        _schedulePresenceUpdate(
+          track: _lastTrack!,
           isPlaying: true,
           position: _playerService?.position ?? _lastPosition,
           duration: _playerService?.duration ?? _lastDuration,
         );
       }
     });
+  }
+
+  /// Schedules a presence update, coalescing rapid calls to avoid Discord rate limits.
+  void _schedulePresenceUpdate({
+    required Track track,
+    required bool isPlaying,
+    required Duration position,
+    Duration? duration,
+    bool immediate = false,
+  }) {
+    final enabled = _settings?.discordRpcEnabled ?? true;
+    if (!enabled) {
+      clearPresence();
+      return;
+    }
+
+    _pendingTrack = track;
+    _pendingIsPlaying = isPlaying;
+    _pendingPosition = position;
+    if (duration != null && duration != Duration.zero) {
+      _pendingDuration = duration;
+    }
+
+    final now = DateTime.now();
+    final elapsed = _lastSendTime != null
+        ? now.difference(_lastSendTime!)
+        : const Duration(seconds: 10);
+
+    // If immediate is requested (e.g. track switch) and cooldown passed, dispatch now.
+    if (immediate && elapsed >= const Duration(milliseconds: 1000)) {
+      _throttleTimer?.cancel();
+      _throttleTimer = null;
+      _dispatchPresenceNow();
+      return;
+    }
+
+    // Otherwise coalesce rapid events so we don't spam faster than every 1.2s.
+    if (_throttleTimer == null) {
+      final remaining = const Duration(milliseconds: 1200) - elapsed;
+      final delay = remaining.isNegative ? Duration.zero : remaining;
+      _throttleTimer = Timer(delay, () {
+        _throttleTimer = null;
+        _dispatchPresenceNow();
+      });
+    }
+  }
+
+  void _dispatchPresenceNow() {
+    _lastSendTime = DateTime.now();
+    final track = _pendingTrack ?? _lastTrack;
+    if (track == null || !_pendingIsPlaying) {
+      clearPresence();
+      return;
+    }
+
+    _lastTrack = track;
+    _lastIsPlaying = true;
+    _lastPosition = _pendingPosition;
+    if (_pendingDuration != null && _pendingDuration != Duration.zero) {
+      _lastDuration = _pendingDuration!;
+    }
+
+    final showButtons = _settings?.discordShowButtons ?? true;
+    final showTimestamps = _settings?.discordShowTimestamps ?? true;
+
+    // Desktop Native IPC
+    if (DiscordRPC.isAvailable) {
+      try {
+        _desktopClient?.updatePresence(
+          track: track,
+          isPlaying: true,
+          position: _lastPosition,
+          duration: _lastDuration,
+          showTimestamps: showTimestamps,
+          showButtons: showButtons,
+          assetCache: _assetCache,
+        );
+      } catch (_) {}
+    }
+
+    // Gateway WebSocket: only send if desktop native IPC is not available or disconnected
+    // on the current machine (preventing dual-engine conflicts and rate-limit clobbering).
+    final isDesktopPipeActive = DiscordRPC.isAvailable && (_desktopClient?.isConnected ?? false);
+    if (_gatewayClient != null && !isDesktopPipeActive) {
+      try {
+        _gatewayClient?.updatePresence(
+          track: track,
+          isPlaying: true,
+          position: _lastPosition,
+          duration: _lastDuration,
+          showTimestamps: showTimestamps,
+          showButtons: showButtons,
+          assetCache: _assetCache,
+        );
+      } catch (_) {}
+    }
   }
 
   /// Updates Discord Rich Presence across active desktop and mobile gateway engines.
@@ -275,58 +507,30 @@ class DiscordRpcService {
     Duration? duration,
   }) async {
     final enabled = _settings?.discordRpcEnabled ?? true;
-    if (!enabled || track == null) {
+    if (!enabled || track == null || !isPlaying) {
+      _throttleTimer?.cancel();
+      _throttleTimer = null;
       await clearPresence();
       return;
     }
 
-    _lastTrack = track;
-    _lastIsPlaying = isPlaying;
-    _lastPosition = position;
-    if (duration != null && duration != Duration.zero) {
-      _lastDuration = duration;
-    }
-
-    // Spotify behavior: when paused, clear Discord presence so the activity disappears.
-    if (!isPlaying) {
-      await clearPresence();
-      return;
-    }
-
-    final showButtons = _settings?.discordShowButtons ?? true;
-    final showTimestamps = _settings?.discordShowTimestamps ?? true;
-
-    // 1. Update Desktop IPC if available
-    if (DiscordRPC.isAvailable) {
-      try {
-        await _desktopClient?.updatePresence(
-          track: track,
-          isPlaying: isPlaying,
-          position: position,
-          duration: duration ?? _lastDuration,
-          showTimestamps: showTimestamps,
-          showButtons: showButtons,
-        );
-      } catch (_) {}
-    }
-
-    // 2. Update Mobile Gateway if connected
-    if (_gatewayClient != null) {
-      try {
-        await _gatewayClient?.updatePresence(
-          track: track,
-          isPlaying: isPlaying,
-          position: position,
-          duration: duration ?? _lastDuration,
-          showTimestamps: showTimestamps,
-          showButtons: showButtons,
-        );
-      } catch (_) {}
-    }
+    _schedulePresenceUpdate(
+      track: track,
+      isPlaying: isPlaying,
+      position: position,
+      duration: duration,
+      immediate: true,
+    );
   }
 
   /// Clears presence on Discord.
   Future<void> clearPresence() async {
+    _clearDebounceTimer?.cancel();
+    _clearDebounceTimer = null;
+    _throttleTimer?.cancel();
+    _throttleTimer = null;
+    _isSwitchingTrack = false;
+    _lastIsPlaying = false;
     try {
       await _desktopClient?.clearPresence();
     } catch (_) {}
@@ -343,6 +547,10 @@ class DiscordRpcService {
     _durationSub?.cancel();
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
+    _clearDebounceTimer?.cancel();
+    _clearDebounceTimer = null;
+    _throttleTimer?.cancel();
+    _throttleTimer = null;
     _settings?.removeListener(_onSettingsChanged);
 
     await clearPresence();
@@ -371,6 +579,8 @@ class _DiscordDesktopClient {
   Duration? _lastDuration;
   bool _lastShowTimestamps = true;
   bool _lastShowButtons = true;
+
+  final Map<String, String> _assetCache = {};
 
   _DiscordDesktopClient({
     required this.appId,
@@ -432,6 +642,7 @@ class _DiscordDesktopClient {
     Duration? duration,
     bool showTimestamps = true,
     bool showButtons = true,
+    Map<String, String>? assetCache,
   }) async {
     if (!DiscordRPC.isAvailable) return;
 
@@ -441,6 +652,9 @@ class _DiscordDesktopClient {
     _lastDuration = duration;
     _lastShowTimestamps = showTimestamps;
     _lastShowButtons = showButtons;
+    if (assetCache != null) {
+      _assetCache.addAll(assetCache);
+    }
 
     if (!isPlaying) {
       await clearPresence();
@@ -466,6 +680,26 @@ class _DiscordDesktopClient {
 
     final publicThumb = track.publicThumbnailUrl;
     final hasThumbnail = publicThumb != null && publicThumb.isNotEmpty;
+    final cachedProxy = hasThumbnail ? _assetCache[publicThumb] : null;
+
+    final appIconProxy = _assetCache[DiscordRpcService.appIconUrl] ??
+        _assetCache[DiscordRpcService.appIconFallbackUrl];
+    final effectiveAppIcon = appIconProxy ?? DiscordRpcService.appIconFallbackUrl;
+
+    // Trigger asynchronous proxy resolution if not cached yet
+    if (hasThumbnail && cachedProxy == null) {
+      DiscordRpcService.instance.resolveAsset(publicThumb);
+    }
+
+    // Windows Desktop IPC: use the cached mp:external/... path if available (same as mobile),
+    // or fallback to publicThumb which Discord Desktop IPC proxies natively.
+    final largeAsset = hasThumbnail
+        ? DiscordAsset.fromUrl(cachedProxy ?? publicThumb, text: track.title)
+        : DiscordAsset.fromUrl(effectiveAppIcon, text: 'FinAudio');
+
+    final smallAsset = hasThumbnail
+        ? DiscordAsset.fromUrl(effectiveAppIcon, text: 'FinAudio')
+        : null;
 
     final presence = DiscordPresence(
       type: DiscordActivityType.listening,
@@ -474,12 +708,8 @@ class _DiscordDesktopClient {
       timestamps: (_lastShowTimestamps && totalDur.inMilliseconds > 0)
           ? DiscordTimestamps.range(start, end)
           : null,
-      largeAsset: hasThumbnail
-          ? DiscordAsset.fromUrl(publicThumb, text: track.title)
-          : const DiscordAsset.fromUrl(DiscordRpcService.appIconFallbackUrl, text: 'FinAudio'),
-      smallAsset: hasThumbnail
-          ? const DiscordAsset.fromUrl(DiscordRpcService.appIconFallbackUrl, text: 'FinAudio')
-          : null,
+      largeAsset: largeAsset,
+      smallAsset: smallAsset,
       statusDisplayType: DiscordStatusDisplayType.name,
       buttons: (_lastShowButtons && track.youtubeUrl.isNotEmpty)
           ? [DiscordButton(label: 'Listen on YouTube', url: track.youtubeUrl)]
@@ -661,6 +891,7 @@ class _DiscordGatewayClient {
     Duration? duration,
     bool showTimestamps = true,
     bool showButtons = true,
+    Map<String, String>? assetCache,
   }) async {
     _lastTrack = track;
     _lastIsPlaying = isPlaying;
@@ -668,6 +899,9 @@ class _DiscordGatewayClient {
     _lastDuration = duration;
     _lastShowTimestamps = showTimestamps;
     _lastShowButtons = showButtons;
+    if (assetCache != null) {
+      _assetCache.addAll(assetCache);
+    }
 
     if (!isPlaying) {
       clearPresence();
@@ -679,14 +913,14 @@ class _DiscordGatewayClient {
     if (publicThumb != null &&
         publicThumb.isNotEmpty &&
         !_assetCache.containsKey(publicThumb)) {
-      _resolveAsset(publicThumb);
+      DiscordRpcService.instance.resolveAsset(publicThumb);
     }
 
     if (!_assetCache.containsKey(DiscordRpcService.appIconUrl)) {
-      _resolveAsset(DiscordRpcService.appIconUrl);
+      DiscordRpcService.instance.resolveAsset(DiscordRpcService.appIconUrl);
     }
     if (!_assetCache.containsKey(DiscordRpcService.appIconFallbackUrl)) {
-      _resolveAsset(DiscordRpcService.appIconFallbackUrl);
+      DiscordRpcService.instance.resolveAsset(DiscordRpcService.appIconFallbackUrl);
     }
 
     if (!isAuthenticated) {
@@ -810,8 +1044,8 @@ class _DiscordGatewayClient {
       largeImage = appIconProxy ?? DiscordRpcService.appIconHash;
       largeText = 'FinAudio';
       // Trigger async resolution so next update will have the cover art
-      if (hasThumbnail && !_pendingAssetFetches.contains(publicThumb)) {
-        _resolveAsset(publicThumb);
+      if (hasThumbnail) {
+        DiscordRpcService.instance.resolveAsset(publicThumb);
       }
     }
 
