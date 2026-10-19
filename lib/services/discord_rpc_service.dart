@@ -63,8 +63,13 @@ class DiscordRpcService {
   final Map<String, String> _assetCache = {};
   final Set<String> _pendingAssetFetches = {};
 
-  /// Debounce timer for pausing. When playback is paused or stopped,
-  /// wait 2.0 seconds before clearing presence so brief pause/resumes and track transitions don't flicker.
+  /// Flag indicating that a track transition / buffering is in progress.
+  /// When true, temporary isPlaying=false events (audio stream resets / network buffering)
+  /// will NOT clear the Discord presence.
+  bool _isTransitioningTrack = false;
+
+  /// Debounce timer for pausing. When playback is paused,
+  /// wait 5.0 seconds before clearing presence so brief pause/resumes don't flicker.
   Timer? _clearDebounceTimer;
 
   /// Coalescing throttle timer to respect Discord's SET_ACTIVITY rate-limit (~1 update per second).
@@ -299,18 +304,21 @@ class DiscordRpcService {
 
     _nowPlayingSub = _playerService?.nowPlayingStream.listen((track) {
       if (track == null) {
-        _lastTrack = null;
-        _pendingTrack = null;
-        _pendingIsPlaying = false;
-        _clearDebounceTimer?.cancel();
-        _clearDebounceTimer = null;
-        _throttleTimer?.cancel();
-        _throttleTimer = null;
-        clearPresence();
+        // Queue emptied / playback dismissed — hard reset everything
+        _isTransitioningTrack = false;
+        _resetTrackState();
+        _sendClearToEngines();
       } else {
+        // New track arrived: we are transitioning to this track.
+        _isTransitioningTrack = true;
         _clearDebounceTimer?.cancel();
         _clearDebounceTimer = null;
         _lastTrack = track;
+        _lastIsPlaying = true;
+        _pendingTrack = track;
+        _pendingIsPlaying = true;
+        _lastPosition = Duration.zero;
+        _lastDuration = _playerService?.duration ?? track.duration;
 
         final thumb = track.publicThumbnailUrl;
         if (thumb != null && thumb.isNotEmpty) {
@@ -322,35 +330,46 @@ class DiscordRpcService {
           track: track,
           isPlaying: true,
           position: Duration.zero,
-          duration: _playerService?.duration ?? track.duration,
+          duration: _lastDuration,
           immediate: true,
         );
       }
     });
 
     _playingSub = _playerService?.playingStream.listen((isPlaying) {
-      _lastIsPlaying = isPlaying;
-      if (!isPlaying) {
-        // User paused or stopped playback: wait 2.0 seconds before removing from Discord.
-        // This gives track transitions and brief pauses time to resume without flicker.
-        _clearDebounceTimer?.cancel();
-        _clearDebounceTimer = Timer(const Duration(milliseconds: 2000), () {
-          _clearDebounceTimer = null;
-          if (!(_playerService?.isPlaying ?? false)) {
-            _throttleTimer?.cancel();
-            _throttleTimer = null;
-            clearPresence();
-          }
-        });
-      } else if (_lastTrack != null) {
+      if (isPlaying) {
+        // Playback has actively started / resumed.
+        _isTransitioningTrack = false;
         _clearDebounceTimer?.cancel();
         _clearDebounceTimer = null;
-        _schedulePresenceUpdate(
-          track: _lastTrack!,
-          isPlaying: true,
-          position: _playerService?.position ?? Duration.zero,
-          duration: _playerService?.duration ?? _lastDuration,
-        );
+        _lastIsPlaying = true;
+
+        if (_lastTrack != null) {
+          _schedulePresenceUpdate(
+            track: _lastTrack!,
+            isPlaying: true,
+            position: _playerService?.position ?? Duration.zero,
+            duration: _playerService?.duration ?? _lastDuration,
+          );
+        }
+      } else {
+        // Playback paused or audio stream resetting during track switch.
+        if (_isTransitioningTrack) {
+          // If a new track is currently loading or buffering, DO NOT clear presence!
+          return;
+        }
+
+        // User paused playback: wait 5 seconds before removing from Discord.
+        _clearDebounceTimer?.cancel();
+        _clearDebounceTimer = Timer(const Duration(seconds: 5), () {
+          _clearDebounceTimer = null;
+          if (!(_playerService?.isPlaying ?? false)) {
+            _lastIsPlaying = false;
+            _throttleTimer?.cancel();
+            _throttleTimer = null;
+            _sendClearToEngines();
+          }
+        });
       }
     });
 
@@ -405,7 +424,8 @@ class DiscordRpcService {
   }) {
     final enabled = _settings?.discordRpcEnabled ?? true;
     if (!enabled) {
-      clearPresence();
+      _resetTrackState();
+      _sendClearToEngines();
       return;
     }
 
@@ -421,17 +441,28 @@ class DiscordRpcService {
         ? now.difference(_lastSendTime!)
         : const Duration(seconds: 10);
 
-    // If immediate is requested (e.g. track switch) and cooldown passed, dispatch now.
-    if (immediate && elapsed >= const Duration(milliseconds: 1000)) {
+    // If immediate is requested (e.g. track switch) and cooldown passed (1500ms), dispatch now.
+    if (immediate && elapsed >= const Duration(milliseconds: 1500)) {
       _throttleTimer?.cancel();
       _throttleTimer = null;
       _dispatchPresenceNow();
       return;
     }
 
-    // Otherwise coalesce rapid events so we don't spam faster than every 1.2s.
+    // Coalesce rapid events (e.g. rapid track skips or quick metadata updates)
+    // to strictly respect Discord's rate limits (~1.5s between SET_ACTIVITY).
+    if (immediate && elapsed < const Duration(milliseconds: 1500)) {
+      _throttleTimer?.cancel();
+      final remaining = const Duration(milliseconds: 1500) - elapsed;
+      _throttleTimer = Timer(remaining.isNegative ? Duration.zero : remaining, () {
+        _throttleTimer = null;
+        _dispatchPresenceNow();
+      });
+      return;
+    }
+
     if (_throttleTimer == null) {
-      final remaining = const Duration(milliseconds: 1200) - elapsed;
+      final remaining = const Duration(milliseconds: 1500) - elapsed;
       final delay = remaining.isNegative ? Duration.zero : remaining;
       _throttleTimer = Timer(delay, () {
         _throttleTimer = null;
@@ -443,13 +474,13 @@ class DiscordRpcService {
   void _dispatchPresenceNow() {
     _lastSendTime = DateTime.now();
     final track = _pendingTrack ?? _lastTrack;
-    if (track == null || !_pendingIsPlaying) {
-      clearPresence();
+
+    if (track == null || (!_pendingIsPlaying && !_lastIsPlaying)) {
       return;
     }
 
     _lastTrack = track;
-    _lastIsPlaying = true;
+    _lastIsPlaying = _pendingIsPlaying || _isTransitioningTrack;
     _lastPosition = _pendingPosition;
     if (_pendingDuration != null && _pendingDuration != Duration.zero) {
       _lastDuration = _pendingDuration!;
@@ -502,7 +533,8 @@ class DiscordRpcService {
     if (!enabled || track == null || !isPlaying) {
       _throttleTimer?.cancel();
       _throttleTimer = null;
-      await clearPresence();
+      _resetTrackState();
+      _sendClearToEngines();
       return;
     }
 
@@ -515,22 +547,36 @@ class DiscordRpcService {
     );
   }
 
-  /// Clears presence on Discord.
-  Future<void> clearPresence() async {
-    _clearDebounceTimer?.cancel();
-    _clearDebounceTimer = null;
-    _throttleTimer?.cancel();
-    _throttleTimer = null;
-    _lastIsPlaying = false;
-    _lastTrack = null;
-    _pendingTrack = null;
-    _pendingIsPlaying = false;
+  /// Sends the clear-activity payload to Discord engines without resetting local track state.
+  /// Used by the debounce timer and direct calls — does NOT null out _lastTrack so that
+  /// a racing nowPlayingStream event won't lose its track reference.
+  void _sendClearToEngines() {
     try {
-      await _desktopClient?.clearPresence();
+      _desktopClient?.clearPresence();
     } catch (_) {}
     try {
       _gatewayClient?.clearPresence();
     } catch (_) {}
+  }
+
+  /// Resets all local track bookkeeping to idle. Call this only when the queue is
+  /// truly empty (nowPlayingStream emits null) or during dispose/settings-off.
+  void _resetTrackState() {
+    _isTransitioningTrack = false;
+    _clearDebounceTimer?.cancel();
+    _clearDebounceTimer = null;
+    _throttleTimer?.cancel();
+    _throttleTimer = null;
+    _lastTrack = null;
+    _lastIsPlaying = false;
+    _pendingTrack = null;
+    _pendingIsPlaying = false;
+  }
+
+  /// Clears presence on Discord (public API for settings toggle / external callers).
+  Future<void> clearPresence() async {
+    _resetTrackState();
+    _sendClearToEngines();
   }
 
   /// Disposes background subscriptions and shuts down active engines.
@@ -541,13 +587,10 @@ class DiscordRpcService {
     _durationSub?.cancel();
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
-    _clearDebounceTimer?.cancel();
-    _clearDebounceTimer = null;
-    _throttleTimer?.cancel();
-    _throttleTimer = null;
+    _resetTrackState();
     _settings?.removeListener(_onSettingsChanged);
 
-    await clearPresence();
+    _sendClearToEngines();
     await _desktopClient?.dispose();
     await _gatewayClient?.disconnect();
 
@@ -651,7 +694,8 @@ class _DiscordDesktopClient {
     }
 
     if (!isPlaying) {
-      await clearPresence();
+      // Send clear to Discord IPC but keep local state for racing track switches
+      await _sendClearIPC();
       return;
     }
 
@@ -712,16 +756,24 @@ class _DiscordDesktopClient {
 
     try {
       await _rpc!.setPresence(presence);
-    } catch (_) {}
+    } catch (_) {
+      _scheduleReconnect();
+    }
   }
 
-  Future<void> clearPresence() async {
-    _lastTrack = null;
-    _lastIsPlaying = false;
+  /// Sends clear to Discord IPC without resetting local state.
+  Future<void> _sendClearIPC() async {
     if (!DiscordRPC.isAvailable || !isConnected) return;
     try {
       await _rpc!.clearPresence();
     } catch (_) {}
+  }
+
+  /// Full clear — resets local state and clears IPC presence.
+  Future<void> clearPresence() async {
+    _lastTrack = null;
+    _lastIsPlaying = false;
+    await _sendClearIPC();
   }
 
   Future<void> dispose() async {
@@ -822,11 +874,11 @@ class _DiscordGatewayClient {
           // Pre-resolve app icon for mobile gateway badge
           _resolveAsset(DiscordRpcService.appIconUrl);
           _resolveAsset(DiscordRpcService.appIconFallbackUrl);
-          // Restore presence immediately if playing, or clear ghost presence
+          // Restore presence immediately if playing, or sweep ghost presence
           if (_lastTrack != null && _lastIsPlaying) {
             _sendPresencePayload();
           } else {
-            clearPresence();
+            _sendClearPayload();
           }
         }
       } else if (op == 9 || op == 7) {
@@ -912,7 +964,9 @@ class _DiscordGatewayClient {
     }
 
     if (!isPlaying) {
-      clearPresence();
+      // Send empty activities to Discord but keep _lastTrack intact so
+      // a racing track-switch update can still reference it.
+      _sendClearPayload();
       return;
     }
 
@@ -1113,9 +1167,9 @@ class _DiscordGatewayClient {
     } catch (_) {}
   }
 
-  void clearPresence() {
-    _lastTrack = null;
-    _lastIsPlaying = false;
+  /// Sends empty activities to Discord Gateway without resetting local state.
+  /// Used during transient pause events where a track switch may follow.
+  void _sendClearPayload() {
     _refreshTimer?.cancel();
     _refreshTimer = null;
     if (isAuthenticated && _ws != null && _ws!.readyState == WebSocket.open) {
@@ -1131,6 +1185,14 @@ class _DiscordGatewayClient {
         }));
       } catch (_) {}
     }
+  }
+
+  /// Full presence clear — resets local state and sends empty activities.
+  /// Called by the parent service when the queue is truly empty.
+  void clearPresence() {
+    _lastTrack = null;
+    _lastIsPlaying = false;
+    _sendClearPayload();
   }
 
   void _handleDisconnect() {
