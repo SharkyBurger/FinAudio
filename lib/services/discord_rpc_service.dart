@@ -63,13 +63,8 @@ class DiscordRpcService {
   final Map<String, String> _assetCache = {};
   final Set<String> _pendingAssetFetches = {};
 
-  /// Flag indicating that a track transition is in progress.
-  /// When true, temporary isPlaying=false events (from audio stream resets)
-  /// will NOT clear the Discord presence.
-  bool _isSwitchingTrack = false;
-
-  /// Debounce timer for pausing. When playback is paused (and not switching tracks),
-  /// wait 2.5 seconds before clearing presence so brief pause/resumes don't flicker.
+  /// Debounce timer for pausing. When playback is paused or stopped,
+  /// wait 2.0 seconds before clearing presence so brief pause/resumes and track transitions don't flicker.
   Timer? _clearDebounceTimer;
 
   /// Coalescing throttle timer to respect Discord's SET_ACTIVITY rate-limit (~1 update per second).
@@ -304,8 +299,9 @@ class DiscordRpcService {
 
     _nowPlayingSub = _playerService?.nowPlayingStream.listen((track) {
       if (track == null) {
-        _isSwitchingTrack = false;
         _lastTrack = null;
+        _pendingTrack = null;
+        _pendingIsPlaying = false;
         _clearDebounceTimer?.cancel();
         _clearDebounceTimer = null;
         _throttleTimer?.cancel();
@@ -314,7 +310,6 @@ class DiscordRpcService {
       } else {
         _clearDebounceTimer?.cancel();
         _clearDebounceTimer = null;
-        _isSwitchingTrack = true;
         _lastTrack = track;
 
         final thumb = track.publicThumbnailUrl;
@@ -336,12 +331,10 @@ class DiscordRpcService {
     _playingSub = _playerService?.playingStream.listen((isPlaying) {
       _lastIsPlaying = isPlaying;
       if (!isPlaying) {
-        // If we are currently transitioning to a new song, DO NOT clear presence!
-        if (_isSwitchingTrack) return;
-
-        // User paused playback: wait 2.5 seconds before removing from Discord (Spotify behavior)
+        // User paused or stopped playback: wait 2.0 seconds before removing from Discord.
+        // This gives track transitions and brief pauses time to resume without flicker.
         _clearDebounceTimer?.cancel();
-        _clearDebounceTimer = Timer(const Duration(milliseconds: 2500), () {
+        _clearDebounceTimer = Timer(const Duration(milliseconds: 2000), () {
           _clearDebounceTimer = null;
           if (!(_playerService?.isPlaying ?? false)) {
             _throttleTimer?.cancel();
@@ -350,7 +343,6 @@ class DiscordRpcService {
           }
         });
       } else if (_lastTrack != null) {
-        _isSwitchingTrack = false;
         _clearDebounceTimer?.cancel();
         _clearDebounceTimer = null;
         _schedulePresenceUpdate(
@@ -365,7 +357,7 @@ class DiscordRpcService {
     _durationSub = _playerService?.durationStream.listen((dur) {
       if (_lastTrack != null && dur > Duration.zero) {
         _lastDuration = dur;
-        if (_lastIsPlaying || _isSwitchingTrack) {
+        if (_lastIsPlaying) {
           _schedulePresenceUpdate(
             track: _lastTrack!,
             isPlaying: true,
@@ -380,7 +372,7 @@ class DiscordRpcService {
     _positionSub = _playerService?.positionStream.listen((pos) {
       final diff = (pos.inSeconds - _lastPosition.inSeconds).abs();
       _lastPosition = pos;
-      if (diff >= 3 && _lastTrack != null && (_lastIsPlaying || _isSwitchingTrack)) {
+      if (diff >= 3 && _lastTrack != null && _lastIsPlaying) {
         _schedulePresenceUpdate(
           track: _lastTrack!,
           isPlaying: true,
@@ -529,8 +521,10 @@ class DiscordRpcService {
     _clearDebounceTimer = null;
     _throttleTimer?.cancel();
     _throttleTimer = null;
-    _isSwitchingTrack = false;
     _lastIsPlaying = false;
+    _lastTrack = null;
+    _pendingTrack = null;
+    _pendingIsPlaying = false;
     try {
       await _desktopClient?.clearPresence();
     } catch (_) {}
@@ -722,6 +716,8 @@ class _DiscordDesktopClient {
   }
 
   Future<void> clearPresence() async {
+    _lastTrack = null;
+    _lastIsPlaying = false;
     if (!DiscordRPC.isAvailable || !isConnected) return;
     try {
       await _rpc!.clearPresence();
@@ -729,6 +725,8 @@ class _DiscordDesktopClient {
   }
 
   Future<void> dispose() async {
+    _lastTrack = null;
+    _lastIsPlaying = false;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _connecting = false;
@@ -824,9 +822,11 @@ class _DiscordGatewayClient {
           // Pre-resolve app icon for mobile gateway badge
           _resolveAsset(DiscordRpcService.appIconUrl);
           _resolveAsset(DiscordRpcService.appIconFallbackUrl);
-          // Restore presence immediately
+          // Restore presence immediately if playing, or clear ghost presence
           if (_lastTrack != null && _lastIsPlaying) {
             _sendPresencePayload();
+          } else {
+            clearPresence();
           }
         }
       } else if (op == 9 || op == 7) {
@@ -851,11 +851,19 @@ class _DiscordGatewayClient {
       }
     });
 
-    // Also start a periodic presence refresh timer (every 25 seconds) to prevent activity timeout
+    if (_lastIsPlaying && _lastTrack != null) {
+      _startRefreshTimer();
+    }
+  }
+
+  void _startRefreshTimer() {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(const Duration(seconds: 25), (_) {
       if (isAuthenticated && _lastTrack != null && _lastIsPlaying) {
         _sendPresencePayload();
+      } else {
+        _refreshTimer?.cancel();
+        _refreshTimer = null;
       }
     });
   }
@@ -1093,22 +1101,29 @@ class _DiscordGatewayClient {
       _ws!.add(jsonEncode({
         'op': 3,
         'd': {
-          'since': 0,
+          'since': null,
           'activities': [activity],
           'status': 'online',
           'afk': false,
         },
       }));
+      if (_refreshTimer == null || !_refreshTimer!.isActive) {
+        _startRefreshTimer();
+      }
     } catch (_) {}
   }
 
   void clearPresence() {
-    if (isAuthenticated) {
+    _lastTrack = null;
+    _lastIsPlaying = false;
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+    if (isAuthenticated && _ws != null && _ws!.readyState == WebSocket.open) {
       try {
         _ws!.add(jsonEncode({
           'op': 3,
           'd': {
-            'since': 0,
+            'since': null,
             'activities': [],
             'status': 'online',
             'afk': false,
@@ -1133,6 +1148,8 @@ class _DiscordGatewayClient {
   }
 
   Future<void> disconnect({bool notify = true}) async {
+    _lastTrack = null;
+    _lastIsPlaying = false;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _heartbeatTimer?.cancel();
