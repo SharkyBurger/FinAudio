@@ -685,6 +685,9 @@ class _DiscordGatewayClient {
     if (!_assetCache.containsKey(DiscordRpcService.appIconUrl)) {
       _resolveAsset(DiscordRpcService.appIconUrl);
     }
+    if (!_assetCache.containsKey(DiscordRpcService.appIconFallbackUrl)) {
+      _resolveAsset(DiscordRpcService.appIconFallbackUrl);
+    }
 
     if (!isAuthenticated) {
       await connect();
@@ -699,37 +702,79 @@ class _DiscordGatewayClient {
     _pendingAssetFetches.add(url);
 
     try {
-      final authHeader = token.startsWith('Bearer ')
-          ? token
-          : (token.startsWith('Bot ') ? token : 'Bearer $token');
-      final res = await http.post(
-        Uri.parse('https://discord.com/api/v10/applications/$appId/external-assets'),
-        headers: {
-          'Authorization': authHeader,
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'urls': [url]}),
-      ).timeout(const Duration(seconds: 6));
+      // Extract the raw token (strip any "Bearer " or "Bot " prefix).
+      // Discord's external-assets endpoint requires the raw user account token
+      // as the Authorization header — NOT prefixed with "Bearer".
+      final rawToken = token.startsWith('Bearer ')
+          ? token.substring(7)
+          : (token.startsWith('Bot ') ? token.substring(4) : token);
 
-      if (res.statusCode == 200) {
-        final list = jsonDecode(res.body) as List<dynamic>;
-        if (list.isNotEmpty) {
-          final item = list.first as Map<String, dynamic>;
-          final path = item['external_asset_path'] as String?;
-          if (path != null && path.isNotEmpty) {
-            _assetCache[url] = 'mp:$path';
-            // Re-send presence if this is the active track or the application icon
-            if (isAuthenticated &&
-                _lastIsPlaying &&
-                (_lastTrack?.publicThumbnailUrl == url ||
-                 url == DiscordRpcService.appIconUrl ||
-                 url == DiscordRpcService.appIconFallbackUrl)) {
-              _sendPresencePayload();
+      // Try auth header candidates: raw token first (user account tokens),
+      // then Bearer prefix (OAuth2 tokens). The external-assets API rejects
+      // Bearer-prefixed user account tokens with 401.
+      final authCandidates = <String>[rawToken, 'Bearer $rawToken'];
+
+      final apiUrl =
+          Uri.parse('https://discord.com/api/v10/applications/$appId/external-assets');
+      final requestBody = jsonEncode({'urls': [url]});
+
+      for (final authHeader in authCandidates) {
+        try {
+          final res = await http.post(
+            apiUrl,
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': 'application/json',
+            },
+            body: requestBody,
+          ).timeout(const Duration(seconds: 8));
+
+          if (res.statusCode == 200) {
+            final list = jsonDecode(res.body) as List<dynamic>;
+            if (list.isNotEmpty) {
+              final item = list.first as Map<String, dynamic>;
+              final path = item['external_asset_path'] as String?;
+              if (path != null && path.isNotEmpty) {
+                _assetCache[url] = 'mp:$path';
+                if (kDebugMode) {
+                  print('[DiscordRPC] Resolved asset: $url → mp:$path');
+                }
+                // Re-send presence if this is the active track or the application icon
+                if (isAuthenticated &&
+                    _lastIsPlaying &&
+                    (_lastTrack?.publicThumbnailUrl == url ||
+                     url == DiscordRpcService.appIconUrl ||
+                     url == DiscordRpcService.appIconFallbackUrl)) {
+                  _sendPresencePayload();
+                }
+                return; // Successfully resolved — stop trying other auth formats
+              }
             }
+            // 200 but no valid path — don't retry with next candidate
+            break;
+          } else if (res.statusCode == 401 || res.statusCode == 403) {
+            // Auth format rejected — try the next candidate
+            if (kDebugMode) {
+              print('[DiscordRPC] external-assets ${res.statusCode} with auth '
+                  '"${authHeader.substring(0, authHeader.length.clamp(0, 12))}…", retrying…');
+            }
+            continue;
+          } else {
+            if (kDebugMode) {
+              print('[DiscordRPC] external-assets failed: ${res.statusCode} ${res.body}');
+            }
+            break;
           }
+        } on TimeoutException {
+          break;
+        } catch (_) {
+          continue;
         }
       }
-    } catch (_) {
+    } catch (e) {
+      if (kDebugMode) {
+        print('[DiscordRPC] _resolveAsset error for $url: $e');
+      }
     } finally {
       _pendingAssetFetches.remove(url);
     }
@@ -747,10 +792,28 @@ class _DiscordGatewayClient {
     final cachedProxy = hasThumbnail ? _assetCache[publicThumb] : null;
 
     final appIconProxy = _assetCache[DiscordRpcService.appIconUrl] ??
-        _assetCache[DiscordRpcService.appIconFallbackUrl] ??
-        DiscordRpcService.appIconFallbackUrl;
-    final largeImage = cachedProxy ?? (hasThumbnail ? publicThumb : appIconProxy);
-    final smallImage = hasThumbnail ? appIconProxy : null;
+        _assetCache[DiscordRpcService.appIconFallbackUrl];
+
+    // Gateway does NOT auto-proxy raw HTTPS URLs (only Desktop IPC does).
+    // Only use mp:external/... proxy paths. If the cover art proxy isn't
+    // resolved yet, fall back to the app icon and trigger async resolution.
+    String largeImage;
+    String? smallImage;
+    String largeText = track.title;
+
+    if (cachedProxy != null) {
+      // Cover art proxy resolved → show cover as large, app icon as small badge
+      largeImage = cachedProxy;
+      smallImage = appIconProxy;
+    } else {
+      // Cover art not yet proxied → use app icon as large image (no badge)
+      largeImage = appIconProxy ?? DiscordRpcService.appIconHash;
+      largeText = 'FinAudio';
+      // Trigger async resolution so next update will have the cover art
+      if (hasThumbnail && !_pendingAssetFetches.contains(publicThumb)) {
+        _resolveAsset(publicThumb);
+      }
+    }
 
     final Map<String, dynamic> activity = {
       'name': 'FinAudio',
@@ -763,7 +826,7 @@ class _DiscordGatewayClient {
     if (largeImage.isNotEmpty) {
       final assets = <String, dynamic>{
         'large_image': largeImage,
-        'large_text': track.title,
+        'large_text': largeText,
       };
       if (smallImage != null && smallImage.isNotEmpty) {
         assets['small_image'] = smallImage;
