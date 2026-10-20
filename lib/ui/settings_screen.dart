@@ -389,7 +389,10 @@ class _DiscordSection extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 4,
                         children: [
                           Text(
                             'Discord Rich Presence',
@@ -398,7 +401,6 @@ class _DiscordSection extends StatelessWidget {
                               color: theme.colorScheme.onSurface,
                             ),
                           ),
-                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
@@ -430,6 +432,8 @@ class _DiscordSection extends StatelessWidget {
                           color: theme.colorScheme.onSurfaceVariant,
                           fontSize: 12,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -519,11 +523,14 @@ class _DiscordSection extends StatelessWidget {
                               children: [
                                 Row(
                                   children: [
-                                    Text(
-                                      settingsService.discordUsername ?? 'Discord User',
-                                      style: theme.textTheme.titleSmall?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13.5,
+                                    Flexible(
+                                      child: Text(
+                                        settingsService.discordUsername ?? 'Discord User',
+                                        style: theme.textTheme.titleSmall?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13.5,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                     const SizedBox(width: 6),

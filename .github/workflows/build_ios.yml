@@ -4,6 +4,11 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
   build-ipa:
@@ -26,7 +31,7 @@ jobs:
         run: |
           flutter build ios --release --no-codesign
 
-      - name: Package Payload into .ipa for Sideloadly
+      - name: Package Payload into .ipa for Sideloading
         run: |
           mkdir -p Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
@@ -38,5 +43,17 @@ jobs:
         with:
           name: FinAudio-iOS
           path: FinAudio.ipa
-          retention-days: 14
+          retention-days: 30
 
+      - name: Publish FinAudio.ipa to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
+        continue-on-error: true
+        with:
+          tag_name: latest-build
+          name: "FinAudio Latest iOS Build"
+          draft: false
+          prerelease: false
+          files: FinAudio.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

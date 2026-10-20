@@ -1458,7 +1458,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Scroll to ensure the Audio Quality tile is visible
-      await tester.drag(find.byType(ListView), const Offset(0, -350));
+      await tester.drag(find.byType(ListView), const Offset(0, -500));
       await tester.pumpAndSettle();
 
       final qualityTile = find.text('Audio Quality').last;
@@ -2573,6 +2573,9 @@ void main() {
             ),
           ),
         );
+        await tester.pumpAndSettle();
+
+        await tester.scrollUntilVisible(find.text('Diagnostics & Logs'), 100, scrollable: find.byType(Scrollable).first);
         await tester.pumpAndSettle();
 
         expect(find.text('Diagnostics & Logs'), findsOneWidget);

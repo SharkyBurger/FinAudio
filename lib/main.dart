@@ -4578,6 +4578,7 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
   late LocalPlaylist _playlist;
   bool _syncing = false;
   bool _fetchingArtworks = false;
+  String _fetchingArtworksProgress = '';
   PlaylistSortOption _sortOption = PlaylistSortOption.original;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -4657,58 +4658,230 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
 
   Future<void> _fetchTrackArtworks() async {
     if (_fetchingArtworks) return;
-    setState(() => _fetchingArtworks = true);
+
+    final missingIndices = <int>[];
+    for (int i = 0; i < _playlist.tracks.length; i++) {
+      final t = _playlist.tracks[i];
+      if (t.thumbnailUrl == null || t.thumbnailUrl!.trim().isEmpty) {
+        missingIndices.add(i);
+      }
+    }
+
+    if (missingIndices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('All tracks already have artwork.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _fetchingArtworks = true;
+      _fetchingArtworksProgress = '0 / ${missingIndices.length}';
+    });
+
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Fetching track artworks in background…')),
+      SnackBar(content: Text('Fetching artworks for ${missingIndices.length} tracks in background...')),
     );
+
     int fetchedCount = 0;
+    final totalMissing = missingIndices.length;
+
     try {
       final updatedTracks = List<LocalPlaylistTrack>.from(_playlist.tracks);
       final yt = YoutubeService();
-      for (int i = 0; i < updatedTracks.length && fetchedCount < 25; i++) {
-        final t = updatedTracks[i];
-        if (t.thumbnailUrl == null || t.thumbnailUrl!.isEmpty) {
-          try {
-            final query = '${t.artist} ${t.title} audio';
-            final results = await yt.search(query);
-            if (results.isNotEmpty) {
-              final videoId = results.first.id.value;
-              updatedTracks[i] = t.copyWith(
-                thumbnailUrl: 'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
-                youtubeVideoId: videoId,
-              );
-              fetchedCount++;
-            }
-          } catch (_) {}
+
+      // Quick pass: check for valid existing video IDs or cached artworks across playlists
+      final remainingIndices = <int>[];
+      for (final idx in missingIndices) {
+        final t = updatedTracks[idx];
+
+        // 1. If track already has an 11-char YouTube ID, use it immediately
+        if (DownloadService.isValidYouTubeVideoId(t.youtubeVideoId, title: t.title)) {
+          final vid = t.youtubeVideoId!;
+          updatedTracks[idx] = t.copyWith(
+            thumbnailUrl: 'https://img.youtube.com/vi/$vid/hqdefault.jpg',
+          );
+          fetchedCount++;
+          continue;
         }
+
+        // 2. Check if another track across playlists already resolved this exact title + artist
+        final cleanTitle = t.title.trim().toLowerCase();
+        final cleanArtist = t.artist.trim().toLowerCase();
+        String? cachedThumb;
+        String? cachedVid;
+
+        for (final pl in widget.playlistService.playlists) {
+          for (final other in pl.tracks) {
+            if (other.thumbnailUrl != null &&
+                other.thumbnailUrl!.isNotEmpty &&
+                other.title.trim().toLowerCase() == cleanTitle &&
+                (other.artist.trim().toLowerCase() == cleanArtist || cleanArtist.isEmpty)) {
+              cachedThumb = other.thumbnailUrl;
+              cachedVid = other.youtubeVideoId;
+              break;
+            }
+          }
+          if (cachedThumb != null) break;
+        }
+
+        if (cachedThumb != null && cachedThumb.isNotEmpty) {
+          updatedTracks[idx] = t.copyWith(
+            thumbnailUrl: cachedThumb,
+            youtubeVideoId: cachedVid ?? t.youtubeVideoId,
+          );
+          fetchedCount++;
+          continue;
+        }
+
+        remainingIndices.add(idx);
       }
+
+      // If quick pass resolved any, save and update UI immediately
       if (fetchedCount > 0) {
         final updated = _playlist.copyWith(tracks: updatedTracks);
         await widget.playlistService.savePlaylist(updated);
-        if (!mounted) return;
-        setState(() => _playlist = updated);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Fetched artworks for $fetchedCount tracks!'),
-            backgroundColor: const Color(0xFF1DB954),
-          ),
+        if (mounted) {
+          setState(() {
+            _playlist = updated;
+            _fetchingArtworksProgress = '$fetchedCount / $totalMissing';
+          });
+        }
+      }
+
+      // Concurrently resolve remaining tracks in batches of 4
+      const int batchSize = 4;
+      for (int i = 0; i < remainingIndices.length; i += batchSize) {
+        if (!mounted) break;
+        final batch = remainingIndices.sublist(
+          i,
+          (i + batchSize < remainingIndices.length) ? i + batchSize : remainingIndices.length,
         );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('All checked tracks already have artwork.')),
+
+        await Future.wait(batch.map((trackIdx) async {
+          final t = updatedTracks[trackIdx];
+          final queryTrack = Track(
+            id: t.youtubeVideoId ?? 'temp_$trackIdx',
+            title: t.title,
+            author: t.artist,
+            youtubeUrl: '',
+            duration: t.duration,
+            thumbnailUrl: null,
+          );
+
+          final queries = DownloadService.buildSearchQueries(queryTrack);
+          String? foundId;
+          String? foundThumb;
+
+          for (final q in queries) {
+            try {
+              final results = await yt.search(q);
+              if (results.isNotEmpty) {
+                final first = results.first;
+                foundId = first.id.value;
+                foundThumb = first.thumbnails.highResUrl.isNotEmpty
+                    ? first.thumbnails.highResUrl
+                    : 'https://img.youtube.com/vi/$foundId/hqdefault.jpg';
+                break;
+              }
+            } catch (_) {}
+          }
+
+          if (foundId == null) {
+            for (final q in queries.take(2)) {
+              try {
+                final musicResults = await yt.searchYTMusic(q);
+                for (final item in musicResults) {
+                  if (item is Map && item['videoId'] != null) {
+                    final vid = item['videoId'].toString();
+                    if (vid.isNotEmpty) {
+                      foundId = vid;
+                      if (item['thumbnails'] != null && (item['thumbnails'] as List).isNotEmpty) {
+                        foundThumb = item['thumbnails'].last['url']?.toString();
+                      }
+                      foundThumb ??= 'https://img.youtube.com/vi/$vid/hqdefault.jpg';
+                      break;
+                    }
+                  }
+                }
+                if (foundId != null) break;
+              } catch (_) {}
+            }
+          }
+
+          if (foundId != null) {
+            foundThumb ??= 'https://img.youtube.com/vi/$foundId/hqdefault.jpg';
+            updatedTracks[trackIdx] = t.copyWith(
+              thumbnailUrl: foundThumb,
+              youtubeVideoId: foundId,
+            );
+            fetchedCount++;
+            unawaited(widget.playlistService.updateTrackResolvedVideoId(
+              title: t.title,
+              artist: t.artist,
+              youtubeVideoId: foundId,
+              thumbnailUrl: foundThumb,
+            ));
+          }
+        }));
+
+        // Incrementally save progress every batch and update UI
+        final updated = _playlist.copyWith(tracks: updatedTracks);
+        await widget.playlistService.savePlaylist(updated);
+        if (mounted) {
+          setState(() {
+            _playlist = updated;
+            _fetchingArtworksProgress = '$fetchedCount / $totalMissing';
+          });
+        }
+
+        // Polite pause between network batches
+        await Future.delayed(const Duration(milliseconds: 120));
+      }
+
+      // Check if playlist cover art itself is missing and can be populated from first song
+      LocalPlaylist finalPlaylist = _playlist;
+      if (finalPlaylist.thumbnailUrl.isEmpty) {
+        final firstWithArt = updatedTracks.firstWhere(
+          (t) => t.thumbnailUrl != null && t.thumbnailUrl!.isNotEmpty,
+          orElse: () => updatedTracks.first,
         );
+        if (firstWithArt.thumbnailUrl != null && firstWithArt.thumbnailUrl!.isNotEmpty) {
+          finalPlaylist = finalPlaylist.copyWith(thumbnailUrl: firstWithArt.thumbnailUrl!);
+          await widget.playlistService.savePlaylist(finalPlaylist);
+          if (mounted) setState(() => _playlist = finalPlaylist);
+        }
+      }
+
+      if (mounted) {
+        if (fetchedCount > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Successfully fetched artworks for $fetchedCount tracks!'),
+              backgroundColor: const Color(0xFF1DB954),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not find new artworks for the remaining tracks.')),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to fetch artworks: $e')),
+          SnackBar(content: Text('Error fetching artworks: $e')),
         );
       }
     } finally {
-      if (mounted) setState(() => _fetchingArtworks = false);
+      if (mounted) {
+        setState(() {
+          _fetchingArtworks = false;
+          _fetchingArtworksProgress = '';
+        });
+      }
     }
   }
-
   Future<void> _sync() async {
     if (!_playlist.isSpotify) return;
     setState(() => _syncing = true);
@@ -5782,6 +5955,41 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
                           ),
                         ),
                       ),
+                    if (_fetchingArtworks)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1DB954).withAlpha(30),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF1DB954).withAlpha(80), width: 0.8),
+                          ),
+                          child: Row(
+                            children: [
+                              const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF1DB954),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Fetching track artworks: $_fetchingArtworksProgress',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF1DB954),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ],
               ),
@@ -5835,16 +6043,35 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
                       child: ListTile(
                         leading: ClipRRect(
                           borderRadius: BorderRadius.circular(6),
-                          child: (track.thumbnailUrl != null && track.thumbnailUrl!.isNotEmpty)
-                              ? Image.network(
-                                  track.thumbnailUrl!,
+                          child: Builder(
+                            builder: (context) {
+                              final thumb = track.thumbnailUrl;
+                              final fallback = _indexBox(sortedIndex >= 0 ? sortedIndex + 1 : index + 1);
+                              if (thumb == null || thumb.trim().isEmpty) {
+                                return fallback;
+                              }
+                              if (thumb.startsWith('http')) {
+                                return Image.network(
+                                  thumb,
                                   width: 42,
                                   height: 42,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, _, _) =>
-                                      _indexBox(sortedIndex >= 0 ? sortedIndex + 1 : index + 1),
-                                )
-                              : _indexBox(sortedIndex >= 0 ? sortedIndex + 1 : index + 1),
+                                  errorBuilder: (_, _, _) => fallback,
+                                );
+                              }
+                              final cleanPath = thumb.startsWith('file://') ? Uri.parse(thumb).toFilePath() : thumb;
+                              if (File(cleanPath).existsSync()) {
+                                return Image.file(
+                                  File(cleanPath),
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, _, _) => fallback,
+                                );
+                              }
+                              return fallback;
+                            },
+                          ),
                         ),
                         title: Text(
                           track.title,

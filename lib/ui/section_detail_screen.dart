@@ -537,38 +537,46 @@ class _NewReleasesScreenState extends State<NewReleasesScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      alignment: WrapAlignment.spaceBetween,
                       children: [
-                        ElevatedButton.icon(
-                          icon: Icon(Icons.play_arrow_rounded, color: onAccent, size: 22),
-                          label: Text(
-                            'Play All',
-                            style: TextStyle(color: onAccent, fontWeight: FontWeight.bold),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: accent,
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ElevatedButton.icon(
+                              icon: Icon(Icons.play_arrow_rounded, color: onAccent, size: 20),
+                              label: Text(
+                                'Play All',
+                                style: TextStyle(color: onAccent, fontWeight: FontWeight.bold),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: accent,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onPressed: () => _playTrackList(filtered, 0),
                             ),
-                          ),
-                          onPressed: () => _playTrackList(filtered, 0),
-                        ),
-                        const SizedBox(width: 10),
-                        OutlinedButton.icon(
-                          icon: Icon(Icons.shuffle_rounded, color: text, size: 18),
-                          label: Text('Shuffle', style: TextStyle(color: text, fontWeight: FontWeight.bold)),
-                          style: OutlinedButton.styleFrom(
-                            backgroundColor: surface,
-                            side: BorderSide(color: text.withAlpha(30)),
-                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              icon: Icon(Icons.shuffle_rounded, color: text, size: 18),
+                              label: Text('Shuffle', style: TextStyle(color: text, fontWeight: FontWeight.bold)),
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: surface,
+                                side: BorderSide(color: text.withAlpha(30)),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onPressed: () => _shuffleAndPlay(filtered),
                             ),
-                          ),
-                          onPressed: () => _shuffleAndPlay(filtered),
+                          ],
                         ),
-                        const Spacer(),
                         Text(
                           '${filtered.length} tracks',
                           style: TextStyle(color: text.withAlpha(140), fontSize: 13, fontWeight: FontWeight.w600),
@@ -997,31 +1005,39 @@ class _SectionTracksScreenState extends State<SectionTracksScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    alignment: WrapAlignment.spaceBetween,
                     children: [
-                      ElevatedButton.icon(
-                        icon: Icon(Icons.play_arrow_rounded, color: onAccent, size: 22),
-                        label: Text('Play All', style: TextStyle(color: onAccent, fontWeight: FontWeight.bold)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accent,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onPressed: () => _playTrackList(filtered, 0),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ElevatedButton.icon(
+                            icon: Icon(Icons.play_arrow_rounded, color: onAccent, size: 20),
+                            label: Text('Play All', style: TextStyle(color: onAccent, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: accent,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () => _playTrackList(filtered, 0),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            icon: Icon(Icons.shuffle_rounded, color: text, size: 18),
+                            label: Text('Shuffle', style: TextStyle(color: text, fontWeight: FontWeight.bold)),
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: surface,
+                              side: BorderSide(color: text.withAlpha(30)),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () => _shuffleAndPlay(filtered),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      OutlinedButton.icon(
-                        icon: Icon(Icons.shuffle_rounded, color: text, size: 18),
-                        label: Text('Shuffle', style: TextStyle(color: text, fontWeight: FontWeight.bold)),
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: surface,
-                          side: BorderSide(color: text.withAlpha(30)),
-                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onPressed: () => _shuffleAndPlay(filtered),
-                      ),
-                      const Spacer(),
                       Text(
                         '${filtered.length} tracks',
                         style: TextStyle(color: text.withAlpha(140), fontSize: 13, fontWeight: FontWeight.w600),
@@ -1052,11 +1068,14 @@ class _SectionTracksScreenState extends State<SectionTracksScreen> {
                                 : null,
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            'Go to ${widget.artistName} profile',
-                            style: TextStyle(color: accent, fontSize: 13, fontWeight: FontWeight.bold),
+                          Expanded(
+                            child: Text(
+                              'Go to ${widget.artistName} profile',
+                              style: TextStyle(color: accent, fontSize: 13, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          const Spacer(),
+                          const SizedBox(width: 8),
                           Icon(Icons.chevron_right_rounded, color: accent, size: 18),
                         ],
                       ),
