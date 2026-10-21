@@ -392,6 +392,7 @@ class _MainScaffoldState extends State<_MainScaffold> {
   List<Widget> _buildContentTabs(Color accentColor, {bool isDesktop = false}) {
     return [
       HomeTab(
+        isDesktop: isDesktop,
         playerService: widget.playerService,
         authService: widget.authService,
         playlistService: widget.playlistService,
@@ -1910,20 +1911,23 @@ class _SearchTabState extends State<SearchTab> {
           ],
         ),
         const SizedBox(height: 4),
-        ..._searchHistory.map((item) => ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.history_rounded, size: 20),
-              title: Text(
-                item,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        ..._searchHistory.map((item) => Material(
+              color: Colors.transparent,
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.history_rounded, size: 20),
+                title: Text(
+                  item,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  onPressed: () => _removeFromHistory(item),
+                  tooltip: 'Remove',
+                ),
+                onTap: () => _selectSearchTerm(item),
               ),
-              trailing: IconButton(
-                icon: const Icon(Icons.close_rounded, size: 18),
-                onPressed: () => _removeFromHistory(item),
-                tooltip: 'Remove',
-              ),
-              onTap: () => _selectSearchTerm(item),
             )),
       ],
     );
@@ -1935,25 +1939,28 @@ class _SearchTabState extends State<SearchTab> {
       itemCount: _suggestions.length,
       itemBuilder: (context, index) {
         final suggestion = _suggestions[index];
-        return ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.search_rounded, size: 20),
-          title: Text(
-            suggestion,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        return Material(
+          color: Colors.transparent,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.search_rounded, size: 20),
+            title: Text(
+              suggestion,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+            trailing: IconButton(
+              icon: const Icon(Icons.north_west_rounded, size: 18),
+              onPressed: () {
+                _searchController.text = suggestion;
+                _searchController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: suggestion.length),
+                );
+              },
+              tooltip: 'Insert into search',
+            ),
+            onTap: () => _selectSearchTerm(suggestion),
           ),
-          trailing: IconButton(
-            icon: const Icon(Icons.north_west_rounded, size: 18),
-            onPressed: () {
-              _searchController.text = suggestion;
-              _searchController.selection = TextSelection.fromPosition(
-                TextPosition(offset: suggestion.length),
-              );
-            },
-            tooltip: 'Insert into search',
-          ),
-          onTap: () => _selectSearchTerm(suggestion),
         );
       },
     );

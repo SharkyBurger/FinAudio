@@ -317,14 +317,16 @@ class DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
   }
 
   Widget _buildTopNavCard(Color surface, Color cardBorder, Color accent, Color text, Color textMuted) {
-    return Container(
-      decoration: BoxDecoration(
-        color: surface,
+    return Material(
+      color: surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cardBorder, width: 1),
+        side: BorderSide(color: cardBorder, width: 1),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
         children: [
           // FinAudio Brand Header
           Padding(
@@ -378,8 +380,9 @@ class DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildLibraryCard(
     Color surface,
@@ -403,11 +406,12 @@ class DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
           .toList();
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: surface,
+    return Material(
+      color: surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cardBorder, width: 1),
+        side: BorderSide(color: cardBorder, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -843,12 +847,12 @@ class DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
 
                   // 2. Main Center Stage Card
                   Expanded(
-                    child: Container(
+                    child: Material(
+                      color: surface,
                       clipBehavior: Clip.antiAlias,
-                      decoration: BoxDecoration(
-                        color: surface,
+                      shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: cardBorder, width: 1),
+                        side: BorderSide(color: cardBorder, width: 1),
                       ),
                       child: Column(
                         children: [
@@ -889,12 +893,12 @@ class DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                     const SizedBox(width: 8),
                     SizedBox(
                       width: 300,
-                      child: Container(
+                      child: Material(
+                        color: surface,
                         clipBehavior: Clip.antiAlias,
-                        decoration: BoxDecoration(
-                          color: surface,
+                        shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: cardBorder, width: 1),
+                          side: BorderSide(color: cardBorder, width: 1),
                         ),
                         child: DesktopRightPanel(
                           track: _nowPlaying,

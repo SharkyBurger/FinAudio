@@ -68,9 +68,11 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
   @override
   void didUpdateWidget(covariant DesktopPlaylistView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.playlist.id != widget.playlist.id) {
+    if (oldWidget.playlist.id != widget.playlist.id || oldWidget.playlist != widget.playlist) {
       _playlist = widget.playlist;
-      _searchQuery = '';
+      if (oldWidget.playlist.id != widget.playlist.id) {
+        _searchQuery = '';
+      }
     }
   }
 
@@ -833,53 +835,51 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                     t.artist,
                   );
 
-                  return MouseRegion(
-                    onEnter: (_) => setState(() => _hoveredIndex = index),
-                    onExit: (_) => setState(() => _hoveredIndex = null),
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: () => _playTrackAt(index),
-                      onDoubleTap: () => _playTrackAt(index),
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isHovered
-                              ? accent.withAlpha(22)
-                              : (isCurrentlyPlaying ? accent.withAlpha(14) : Colors.transparent),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          children: [
-                            // # / Play button / Playing indicator
-                            SizedBox(
-                              width: 40,
-                              child: isHovered
-                                  ? IconButton(
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                      icon: Icon(
-                                        Icons.play_arrow_rounded,
-                                        size: 20,
-                                        color: accent,
-                                      ),
-                                      onPressed: () => _playTrackAt(index),
-                                    )
-                                  : isCurrentlyPlaying
-                                      ? Icon(
-                                          Icons.volume_up_rounded,
-                                          size: 16,
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                    child: Material(
+                      color: isHovered
+                          ? accent.withAlpha(22)
+                          : (isCurrentlyPlaying ? accent.withAlpha(14) : Colors.transparent),
+                      borderRadius: BorderRadius.circular(6),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(6),
+                        onHover: (hovering) => setState(() => _hoveredIndex = hovering ? index : null),
+                        onTap: () => _playTrackAt(index),
+                        onDoubleTap: () => _playTrackAt(index),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          child: Row(
+                            children: [
+                              // # / Play button / Playing indicator
+                              SizedBox(
+                                width: 40,
+                                child: isHovered
+                                    ? IconButton(
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        icon: Icon(
+                                          Icons.play_arrow_rounded,
+                                          size: 20,
                                           color: accent,
-                                        )
-                                      : Text(
-                                          '${index + 1}',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: textDim,
-                                          ),
                                         ),
-                            ),
+                                        onPressed: () => _playTrackAt(index),
+                                      )
+                                    : isCurrentlyPlaying
+                                        ? Icon(
+                                            Icons.volume_up_rounded,
+                                            size: 16,
+                                            color: accent,
+                                          )
+                                        : Text(
+                                            '${index + 1}',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: textDim,
+                                            ),
+                                          ),
+                              ),
                             const SizedBox(width: 12),
 
                             // Artwork + Title + Artist
@@ -1003,8 +1003,9 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                         ),
                       ),
                     ),
-                  );
-                },
+                  ),
+                );
+              },
                 childCount: tracks.length,
               ),
             ),

@@ -33,6 +33,7 @@ class HomeTab extends StatefulWidget {
   final VoidCallback onOpenSearch;
   final VoidCallback onOpenSettings;
   final void Function(LocalPlaylist playlist) onOpenPlaylistDetail;
+  final bool isDesktop;
 
   const HomeTab({
     super.key,
@@ -44,6 +45,7 @@ class HomeTab extends StatefulWidget {
     required this.onOpenSearch,
     required this.onOpenSettings,
     required this.onOpenPlaylistDetail,
+    this.isDesktop = false,
   });
 
   @override
@@ -2084,6 +2086,7 @@ class _HomeTabState extends State<HomeTab> {
 
     final userPhoto = widget.authService.currentUser?.photoUrl;
     final userName = widget.authService.currentUser?.displayName?.toUpperCase() ?? 'SHARKYBURGER';
+    final isDesktop = widget.isDesktop;
 
     return Scaffold(
       backgroundColor: bg,
@@ -2094,14 +2097,15 @@ class _HomeTabState extends State<HomeTab> {
         child: CustomScrollView(
           controller: _scrollController,
           slivers: [
-            // 1. Pinned / Floating Top App Bar (FinAudio Brand & Action Buttons)
-            SliverAppBar(
-              backgroundColor: bg,
-              elevation: 0,
-              scrolledUnderElevation: 2,
-              floating: true,
-              pinned: false,
-              toolbarHeight: 64,
+            // 1. Pinned / Floating Top App Bar (Only on mobile/narrow screens to avoid desktop header duplication)
+            if (!isDesktop)
+              SliverAppBar(
+                backgroundColor: bg,
+                elevation: 0,
+                scrolledUnderElevation: 2,
+                floating: true,
+                pinned: false,
+                toolbarHeight: 64,
               title: Row(
                 children: [
                   Container(
@@ -2169,6 +2173,9 @@ class _HomeTabState extends State<HomeTab> {
                 const SizedBox(width: 14),
               ],
             ),
+
+            if (isDesktop)
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
             // 2. Horizontal Mood/Genre Filter Chips
             SliverToBoxAdapter(
@@ -2486,92 +2493,161 @@ class _HomeTabState extends State<HomeTab> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final isDesktop = constraints.maxWidth >= 600;
-              final columns = isDesktop ? (constraints.maxWidth / 175).floor().clamp(3, 8) : 3;
-              final spacing = isDesktop ? 12.0 : 8.0;
+              final onAccent = accent.computeLuminance() > 0.5 ? const Color(0xFF101010) : const Color(0xFFFFFFFF);
+
+              if (isDesktop) {
+                final columns = (constraints.maxWidth / 280).floor().clamp(2, 4);
+                final spacing = 12.0;
+                final itemWidth = (constraints.maxWidth - (columns - 1) * spacing) / columns;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: [
+                    // 1. Liked Music Tile (Desktop Spotify-style horizontal card)
+                    SizedBox(
+                      width: itemWidth,
+                      child: _DesktopQuickPickTile(
+                        leading: Container(
+                          width: 56,
+                          height: 56,
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.thumb_up_rounded, color: Colors.white, size: 24),
+                          ),
+                        ),
+                        title: 'Liked Music',
+                        subtitle: '${likedPlaylist.tracks.length} songs',
+                        text: text,
+                        accent: accent,
+                        onAccent: onAccent,
+                        onTap: () => widget.onOpenPlaylistDetail(likedPlaylist),
+                        onPlayNow: likedPlaylist.tracks.isNotEmpty
+                            ? () => _playTrackList(likedPlaylist.tracks, 0)
+                            : null,
+                      ),
+                    ),
+
+                    // 2..8: Recent/Top listened items (Desktop Spotify-style horizontal cards)
+                    ...items.map((item) {
+                      return SizedBox(
+                        width: itemWidth,
+                        child: _DesktopQuickPickTile(
+                          leading: _buildYtmImage(
+                            imageUrl: item.coverUrl,
+                            width: 56,
+                            height: 56,
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          title: item.title,
+                          subtitle: item.artist,
+                          text: text,
+                          accent: accent,
+                          onAccent: onAccent,
+                          onTap: () {
+                            if (item.onTap != null) {
+                              item.onTap!();
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Playing "${item.title}"')),
+                              );
+                            }
+                          },
+                          onPlayNow: item.onTap,
+                        ),
+                      );
+                    }),
+                  ],
+                );
+              }
+
+              // Mobile Layout: 3x3 square grid with rock-solid Material + InkWell hit testing
+              final columns = 3;
+              final spacing = 8.0;
               final itemWidth = (constraints.maxWidth - (columns - 1) * spacing) / columns;
               return Wrap(
                 spacing: spacing,
                 runSpacing: spacing,
                 children: [
-                  // 1. Liked Music tile
-                  MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: () => widget.onOpenPlaylistDetail(likedPlaylist),
-                      child: Container(
-                        width: itemWidth,
-                        height: itemWidth,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                  // 1. Liked Music tile (Mobile)
+                  SizedBox(
+                    width: itemWidth,
+                    height: itemWidth,
+                    child: Material(
+                      borderRadius: BorderRadius.circular(10),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => widget.onOpenPlaylistDetail(likedPlaylist),
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF8B5CF6).withAlpha(35),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Stack(
-                          children: [
-                            const Center(
-                              child: Icon(Icons.thumb_up_rounded, color: Colors.white, size: 36),
-                            ),
-                            Positioned(
-                              left: 8,
-                              right: 8,
-                              bottom: 8,
-                              child: Row(
-                                children: const [
-                                  Expanded(
-                                    child: Text(
-                                      'Liked Music',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
+                          child: Stack(
+                            children: [
+                              const Center(
+                                child: Icon(Icons.thumb_up_rounded, color: Colors.white, size: 36),
+                              ),
+                              Positioned(
+                                left: 8,
+                                right: 8,
+                                bottom: 8,
+                                child: Row(
+                                  children: const [
+                                    Expanded(
+                                      child: Text(
+                                        'Liked Music',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  Icon(Icons.chevron_right_rounded, color: Colors.white, size: 14),
-                                ],
+                                    Icon(Icons.chevron_right_rounded, color: Colors.white, size: 14),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
 
-                  // 2..8: Top listened items
+                  // 2..8: Top listened items (Mobile)
                   ...items.map((item) {
-                    return MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: GestureDetector(
-                        onTap: () {
-                          if (item.onTap != null) {
-                            item.onTap!();
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Playing "${item.title}"')),
-                            );
-                          }
-                        },
-                        child: Container(
-                          width: itemWidth,
-                          height: itemWidth,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            color: surface,
-                            border: Border.all(color: text.withAlpha(20)),
-                          ),
-                          clipBehavior: Clip.antiAlias,
+                    return SizedBox(
+                      width: itemWidth,
+                      height: itemWidth,
+                      child: Material(
+                        borderRadius: BorderRadius.circular(10),
+                        color: surface,
+                        clipBehavior: Clip.antiAlias,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: BorderSide(color: text.withAlpha(20)),
+                        ),
+                        child: InkWell(
+                          onTap: () {
+                            if (item.onTap != null) {
+                              item.onTap!();
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Playing "${item.title}"')),
+                              );
+                            }
+                          },
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
@@ -2619,16 +2695,16 @@ class _HomeTabState extends State<HomeTab> {
                     );
                   }),
 
-                  // 9. More tile
-                  MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Container(
-                      width: itemWidth,
-                      height: itemWidth,
-                      decoration: BoxDecoration(
+                  // 9. More tile (Mobile)
+                  SizedBox(
+                    width: itemWidth,
+                    height: itemWidth,
+                    child: Material(
+                      borderRadius: BorderRadius.circular(10),
+                      color: surface,
+                      shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
-                        color: surface,
-                        border: Border.all(color: text.withAlpha(20)),
+                        side: BorderSide(color: text.withAlpha(20)),
                       ),
                       child: Center(
                         child: Icon(Icons.more_horiz_rounded, color: text.withAlpha(120), size: 28),
@@ -2922,6 +2998,7 @@ class _HomeTabState extends State<HomeTab> {
             itemBuilder: (_, i) {
               final album = albums[i];
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -3033,6 +3110,7 @@ class _HomeTabState extends State<HomeTab> {
             itemBuilder: (_, i) {
               final a = artists[i];
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () => _openArtistPage(a.name, channelId: a.channelId, imageUrl: a.imageUrl),
                 child: SizedBox(
                   width: 130,
@@ -3125,6 +3203,7 @@ class _HomeTabState extends State<HomeTab> {
             itemBuilder: (_, i) {
               final track = tracks[i];
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () => _playTrackList(tracks, i),
                 child: SizedBox(
                   width: 145,
@@ -3261,6 +3340,7 @@ class _HomeTabState extends State<HomeTab> {
             itemBuilder: (_, i) {
               final mix = mixes[i];
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () {
                   List<LocalPlaylistTrack> tracksToPlay = [];
                   if (mix.title.contains('Supermix')) {
@@ -3471,6 +3551,7 @@ class _HomeTabState extends State<HomeTab> {
             itemBuilder: (_, i) {
               final track = tracks[i];
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () => _playTrackList(tracks, i),
                 child: SizedBox(
                   width: 145,
@@ -3629,6 +3710,7 @@ class _HomeTabState extends State<HomeTab> {
             itemBuilder: (_, i) {
               final track = tracks[i];
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () => _playTrackList(tracks, i),
                 child: SizedBox(
                   width: 145,
@@ -3721,6 +3803,7 @@ class _HomeTabState extends State<HomeTab> {
             itemBuilder: (_, i) {
               final pl = playlists[i];
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -3835,6 +3918,7 @@ class _HomeTabState extends State<HomeTab> {
             itemBuilder: (_, i) {
               final p = playlists[i];
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () => widget.onOpenPlaylistDetail(p),
                 child: SizedBox(
                   width: 145,
@@ -3951,6 +4035,7 @@ class _HomeTabState extends State<HomeTab> {
             itemBuilder: (_, i) {
               final album = albums[i];
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -4081,6 +4166,7 @@ class _HomeTabState extends State<HomeTab> {
             itemBuilder: (_, i) {
               final a = artists[i];
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () => _openArtistPage(a.name, channelId: a.channelId, imageUrl: a.imageUrl),
                 child: SizedBox(
                   width: 130,
@@ -4195,6 +4281,7 @@ class _HomeTabState extends State<HomeTab> {
             itemBuilder: (_, i) {
               final track = tracks[i];
               return GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () => _playTrackList(tracks, i),
                 child: SizedBox(
                   width: 145,
@@ -4235,6 +4322,120 @@ class _HomeTabState extends State<HomeTab> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _DesktopQuickPickTile extends StatefulWidget {
+  final Widget leading;
+  final String title;
+  final String? subtitle;
+  final Color text;
+  final Color accent;
+  final Color onAccent;
+  final VoidCallback onTap;
+  final VoidCallback? onPlayNow;
+
+  const _DesktopQuickPickTile({
+    required this.leading,
+    required this.title,
+    this.subtitle,
+    required this.text,
+    required this.accent,
+    required this.onAccent,
+    required this.onTap,
+    this.onPlayNow,
+  });
+
+  @override
+  State<_DesktopQuickPickTile> createState() => _DesktopQuickPickTileState();
+}
+
+class _DesktopQuickPickTileState extends State<_DesktopQuickPickTile> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _hovered ? widget.text.withAlpha(35) : widget.text.withAlpha(15),
+      borderRadius: BorderRadius.circular(6),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onHover: (hover) => setState(() => _hovered = hover),
+        onTap: widget.onTap,
+        child: SizedBox(
+          height: 56,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 56,
+                height: 56,
+                child: widget.leading,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: widget.text,
+                      ),
+                    ),
+                    if (widget.subtitle != null && widget.subtitle!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: widget.text.withAlpha(140),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (_hovered || widget.onPlayNow != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 150),
+                    opacity: _hovered ? 1.0 : 0.0,
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: widget.accent,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: widget.accent.withAlpha(80),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: Icon(Icons.play_arrow_rounded, color: widget.onAccent, size: 22),
+                        onPressed: widget.onPlayNow ?? widget.onTap,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
