@@ -33,6 +33,9 @@ import 'package:finaudio/widgets/artist_picker_sheet.dart';
 import 'package:finaudio/services/discord_rpc_service.dart';
 import 'package:finaudio/widgets/discord_login_dialog.dart';
 import 'package:finaudio/services/crash_log_service.dart';
+import 'package:finaudio/ui/desktop/desktop_spotify_shell.dart';
+import 'package:finaudio/ui/desktop/desktop_playlist_view.dart';
+import 'package:finaudio/ui/desktop/desktop_right_panel.dart';
 import 'package:finaudio/main.dart';
 
 void main() {
@@ -1225,6 +1228,77 @@ void main() {
         );
 
         expect(find.text('80%'), findsOneWidget);
+        player.dispose();
+      }, _TestHttpOverrides());
+    });
+
+    testWidgets('DesktopSpotifyShell renders Spotify desktop layout, sidebar, playlist view, and right panel toggle', (tester) async {
+      await HttpOverrides.runWithHttpOverrides(() async {
+        SharedPreferences.setMockInitialValues({});
+        final settings = SettingsService();
+        await settings.init();
+        final playlist = PlaylistService();
+        await playlist.init();
+        final auth = GoogleAuthService();
+        await auth.initialize();
+        final player = PlayerService();
+
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: DesktopSpotifyShell(
+              accentColor: const Color(0xFF1DB954),
+              playerService: player,
+              authService: auth,
+              playlistService: playlist,
+              settingsService: settings,
+              contentTabs: const [
+                Center(child: Text('Home Content')),
+                Center(child: Text('Search Content')),
+                Center(child: Text('Library Content')),
+                Center(child: Text('Settings Content')),
+              ],
+              onSettingsChanged: () {},
+            ),
+          ),
+        );
+
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        // 1. Verify Spotify-style Sidebar cards render
+        expect(find.text('FinAudio'), findsOneWidget);
+        expect(find.text('Your Library'), findsOneWidget);
+        expect(find.text('Liked Songs'), findsOneWidget);
+        expect(find.text('Home Content'), findsOneWidget);
+
+        // 2. Tap Liked Songs to open DesktopPlaylistView in center stage
+        await tester.tap(find.text('Liked Songs'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.byType(DesktopPlaylistView), findsOneWidget);
+        expect(find.text('PUBLIC PLAYLIST'), findsOneWidget);
+
+        // 3. Toggle Right-Hand Panel (Now Playing view)
+        expect(find.byTooltip('Now playing view'), findsOneWidget);
+        await tester.tap(find.byTooltip('Now playing view'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.byType(DesktopRightPanel), findsOneWidget);
+        expect(find.text('Now Playing'), findsOneWidget);
+
+        // Close right panel
+        await tester.tap(find.byTooltip('Close view'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(find.byType(DesktopRightPanel), findsNothing);
+
         player.dispose();
       }, _TestHttpOverrides());
     });
@@ -2635,6 +2709,12 @@ class _TestHttpOverrides extends HttpOverrides {
 class _MockHttpClient extends Fake implements HttpClient {
   @override
   Duration? connectionTimeout;
+  @override
+  Duration idleTimeout = const Duration(seconds: 30);
+  @override
+  int? maxConnectionsPerHost;
+  @override
+  bool Function(X509Certificate cert, String host, int port)? badCertificateCallback;
   @override
   bool autoUncompress = false;
   @override
