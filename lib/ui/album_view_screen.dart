@@ -28,6 +28,8 @@ class AlbumViewScreen extends StatefulWidget {
   final String? subtitle;
   final List<LocalPlaylistTrack>? initialTracks;
   final bool isPlaylist;
+  final bool isEmbedded;
+  final VoidCallback? onBack;
 
   final PlayerService playerService;
   final PlaylistService playlistService;
@@ -46,6 +48,8 @@ class AlbumViewScreen extends StatefulWidget {
     this.subtitle,
     this.initialTracks,
     this.isPlaylist = false,
+    this.isEmbedded = false,
+    this.onBack,
     required this.playerService,
     required this.playlistService,
     required this.settingsService,
@@ -639,6 +643,7 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
             ? Colors.white
             : Colors.black;
 
+    final isDesktop = MediaQuery.of(context).size.width >= 800 || widget.isEmbedded;
     final displayTitle = _resolvedTitle ?? widget.title;
     final displayArtist = _resolvedArtist ?? widget.artist ?? '';
     final displayCover = _resolvedCoverUrl ?? widget.coverUrl;
@@ -646,20 +651,25 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
     final totalDurationStr = _formatTotalDuration(_tracks);
     final filtered = _filteredTracks;
 
-    return Scaffold(
-      backgroundColor: bg,
-      body: CustomScrollView(
-        controller: _scrollController,
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          // 1. Top App Bar with back button and search toggle
+    final scrollContent = CustomScrollView(
+      controller: _scrollController,
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        // Top App Bar for mobile or non-embedded desktop
+        if (!isDesktop)
           SliverAppBar(
             pinned: true,
             elevation: 0,
             backgroundColor: bg,
             leading: IconButton(
               icon: Icon(Icons.arrow_back_ios_new_rounded, color: text, size: 20),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                if (widget.onBack != null) {
+                  widget.onBack!();
+                } else {
+                  Navigator.of(context).pop();
+                }
+              },
             ),
             title: Text(
               displayTitle,
@@ -691,42 +701,198 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
                   },
                 ),
             ],
-          ),
-
-          // 2. In-screen Search bar (if active)
-          if (_showSearchBar)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                child: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  style: TextStyle(color: text),
-                  decoration: InputDecoration(
-                    hintText: 'Search songs in this ${displayType.toLowerCase()}...',
-                    hintStyle: TextStyle(color: text.withAlpha(120), fontSize: 14),
-                    prefixIcon: Icon(Icons.search_rounded, color: text.withAlpha(150), size: 20),
-                    filled: true,
-                    fillColor: surface,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      borderSide: BorderSide.none,
-                    ),
+          )
+        else if (!widget.isEmbedded)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.arrow_back_rounded, color: text),
+                    tooltip: 'Back',
+                    onPressed: () {
+                      if (widget.onBack != null) {
+                        widget.onBack!();
+                      } else {
+                        Navigator.of(context).pop();
+                      }
+                    },
                   ),
-                  onChanged: (q) => setState(() => _searchQuery = q),
-                ),
+                ],
               ),
             ),
+          ),
 
-          // 3. Album / Playlist Hero Header
+        // 2. In-screen Search bar (for mobile if active)
+        if (!isDesktop && _showSearchBar)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: TextField(
+                controller: _searchController,
+                autofocus: true,
+                style: TextStyle(color: text),
+                decoration: InputDecoration(
+                  hintText: 'Search songs in this ${displayType.toLowerCase()}...',
+                  hintStyle: TextStyle(color: text.withAlpha(120), fontSize: 14),
+                  prefixIcon: Icon(Icons.search_rounded, color: text.withAlpha(150), size: 20),
+                  filled: true,
+                  fillColor: surface,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                onChanged: (q) => setState(() => _searchQuery = q),
+              ),
+            ),
+          ),
+
+        // 3. Header
+        if (isDesktop)
+          // Spotify Desktop Header Banner
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(28, 20, 28, 16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    accent.withAlpha(35),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // High-res Cover Art
+                  Container(
+                    width: 192,
+                    height: 192,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(120),
+                          blurRadius: 24,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: displayCover != null && displayCover.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: displayCover,
+                            fit: BoxFit.cover,
+                            placeholder: (_, _) => Container(color: surface),
+                            errorWidget: (_, _, _) => Container(
+                              color: surface,
+                              child: Icon(
+                                widget.isPlaylist ? Icons.playlist_play_rounded : Icons.album_rounded,
+                                color: text.withAlpha(80),
+                                size: 64,
+                              ),
+                            ),
+                          )
+                        : Container(
+                            color: surface,
+                            child: Icon(
+                              widget.isPlaylist ? Icons.playlist_play_rounded : Icons.album_rounded,
+                              color: text.withAlpha(80),
+                              size: 64,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 24),
+                  // Metadata Info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          displayType.toUpperCase(),
+                          style: TextStyle(
+                            color: text.withAlpha(180),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          displayTitle,
+                          style: TextStyle(
+                            color: text,
+                            fontSize: 36,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.6,
+                            height: 1.15,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            if (displayArtist.isNotEmpty) ...[
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () => _openArtistPage(displayArtist),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 11,
+                                      backgroundColor: accent.withAlpha(40),
+                                      child: Icon(Icons.person_rounded, size: 13, color: accent),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      displayArtist,
+                                      style: TextStyle(
+                                        color: text,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(' • ', style: TextStyle(color: text.withAlpha(140), fontSize: 13)),
+                            ],
+                            if (_resolvedYear != null && _resolvedYear!.isNotEmpty) ...[
+                              Text('$_resolvedYear • ', style: TextStyle(color: text.withAlpha(140), fontSize: 13)),
+                            ],
+                            if (_tracks.isNotEmpty) ...[
+                              Text(
+                                '${_tracks.length} ${_tracks.length == 1 ? 'song' : 'songs'}',
+                                style: TextStyle(color: text.withAlpha(160), fontSize: 13),
+                              ),
+                              if (totalDurationStr.isNotEmpty)
+                                Text(', $totalDurationStr', style: TextStyle(color: text.withAlpha(130), fontSize: 13)),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          // Mobile Hero Header
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Center artwork
                   Center(
                     child: Container(
                       width: 200,
@@ -773,8 +939,6 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // Album / Playlist Title
                   Text(
                     displayTitle,
                     style: TextStyle(
@@ -787,8 +951,6 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
-
-                  // Artist Name (tappable to jump to artist page)
                   if (displayArtist.isNotEmpty)
                     GestureDetector(
                       onTap: () => _openArtistPage(displayArtist),
@@ -798,11 +960,7 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
                           CircleAvatar(
                             radius: 11,
                             backgroundColor: accent.withAlpha(40),
-                            child: Icon(
-                              Icons.person_rounded,
-                              size: 13,
-                              color: accent,
-                            ),
+                            child: Icon(Icons.person_rounded, size: 13, color: accent),
                           ),
                           const SizedBox(width: 8),
                           Flexible(
@@ -818,25 +976,15 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            size: 16,
-                            color: text.withAlpha(140),
-                          ),
+                          Icon(Icons.chevron_right_rounded, size: 16, color: text.withAlpha(140)),
                         ],
                       ),
                     ),
-
                   const SizedBox(height: 8),
-
-                  // Metadata row: Type • Year • Tracks • Total Duration
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                         decoration: BoxDecoration(
                           color: text.withAlpha(25),
                           borderRadius: BorderRadius.circular(4),
@@ -852,40 +1000,22 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
                         ),
                       ),
                       if (_resolvedYear != null && _resolvedYear!.isNotEmpty) ...[
-                        Text(
-                          ' • $_resolvedYear',
-                          style: TextStyle(
-                            color: text.withAlpha(140),
-                            fontSize: 12,
-                          ),
-                        ),
+                        Text(' • $_resolvedYear', style: TextStyle(color: text.withAlpha(140), fontSize: 12)),
                       ],
                       if (_tracks.isNotEmpty) ...[
                         Text(
                           ' • ${_tracks.length} ${_tracks.length == 1 ? 'song' : 'songs'}',
-                          style: TextStyle(
-                            color: text.withAlpha(140),
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: text.withAlpha(140), fontSize: 12),
                         ),
                         if (totalDurationStr.isNotEmpty) ...[
-                          Text(
-                            ', $totalDurationStr',
-                            style: TextStyle(
-                              color: text.withAlpha(140),
-                              fontSize: 12,
-                            ),
-                          ),
+                          Text(', $totalDurationStr', style: TextStyle(color: text.withAlpha(140), fontSize: 12)),
                         ],
                       ],
                     ],
                   ),
                   const SizedBox(height: 18),
-
-                  // Action Buttons: Play All & Shuffle
                   Row(
                     children: [
-                      // Play All Button
                       GestureDetector(
                         onTap: () => _playAll(shuffle: false),
                         child: Container(
@@ -903,37 +1033,22 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
                             ],
                           ),
                           child: Center(
-                            child: Icon(
-                              Icons.play_arrow_rounded,
-                              size: 32,
-                              color: onAccent,
-                            ),
+                            child: Icon(Icons.play_arrow_rounded, size: 32, color: onAccent),
                           ),
                         ),
                       ),
                       const SizedBox(width: 14),
-
-                      // Shuffle Button
                       IconButton(
                         iconSize: 26,
-                        icon: Icon(
-                          Icons.shuffle_rounded,
-                          color: text.withAlpha(200),
-                        ),
+                        icon: Icon(Icons.shuffle_rounded, color: text.withAlpha(200)),
                         tooltip: 'Shuffle',
                         onPressed: () => _playAll(shuffle: true),
                       ),
-
                       const Spacer(),
-
-                      // Quick search button if not already shown
                       if (!_showSearchBar && _tracks.isNotEmpty)
                         IconButton(
                           iconSize: 22,
-                          icon: Icon(
-                            Icons.filter_list_rounded,
-                            color: text.withAlpha(180),
-                          ),
+                          icon: Icon(Icons.filter_list_rounded, color: text.withAlpha(180)),
                           tooltip: 'Filter tracks',
                           onPressed: () => setState(() => _showSearchBar = true),
                         ),
@@ -944,92 +1059,241 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
             ),
           ),
 
-          // 4. Loading Indicator
-          if (_loading)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Center(
-                  child: Column(
-                    children: [
-                      SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: accent,
+        // Desktop Action Toolbar
+        if (isDesktop)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+              child: Row(
+                children: [
+                  // Large circular play button
+                  Material(
+                    color: accent,
+                    shape: const CircleBorder(),
+                    elevation: 3,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => _playAll(shuffle: false),
+                      child: SizedBox(
+                        width: 52,
+                        height: 52,
+                        child: Center(
+                          child: Icon(
+                            Icons.play_arrow_rounded,
+                            size: 32,
+                            color: onAccent,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 14),
-                      Text(
-                        'Loading tracklist...',
-                        style: TextStyle(
-                          color: text.withAlpha(150),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
+                  const SizedBox(width: 16),
+                  // Shuffle button
+                  IconButton(
+                    iconSize: 22,
+                    icon: Icon(Icons.shuffle_rounded, color: text.withAlpha(190)),
+                    tooltip: 'Shuffle',
+                    onPressed: () => _playAll(shuffle: true),
+                  ),
+                  const Spacer(),
+                  // Search filter input
+                  Container(
+                    width: 220,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: text.withAlpha(22)),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.search_rounded, size: 16, color: text.withAlpha(140)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            style: TextStyle(fontSize: 12, color: text),
+                            decoration: InputDecoration(
+                              hintText: 'Search in this ${displayType.toLowerCase()}',
+                              hintStyle: TextStyle(fontSize: 11, color: text.withAlpha(120)),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                          ),
+                        ),
+                        if (_searchQuery.isNotEmpty)
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                            child: Icon(Icons.close_rounded, size: 14, color: text.withAlpha(140)),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // Desktop Table Header
+        if (isDesktop && filtered.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 44,
+                          child: Text(
+                            '#',
+                            style: TextStyle(
+                              color: text.withAlpha(140),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Title',
+                            style: TextStyle(
+                              color: text.withAlpha(140),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 100,
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Icon(Icons.access_time_rounded, size: 16, color: text.withAlpha(140)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, thickness: 1, color: text.withAlpha(20)),
+                  const SizedBox(height: 4),
+                ],
+              ),
+            ),
+          ),
+
+        // 4. Loading Indicator
+        if (_loading)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Center(
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: accent,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Loading tracklist...',
+                      style: TextStyle(color: text.withAlpha(150), fontSize: 13),
+                    ),
+                  ],
                 ),
               ),
             ),
+          ),
 
-          // 5. Error State
-          if (!_loading && _error != null && _tracks.isEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.error_outline_rounded,
-                        color: Colors.redAccent.withAlpha(200),
-                        size: 42,
+        // 5. Error State
+        if (!_loading && _error != null && _tracks.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      color: Colors.redAccent.withAlpha(200),
+                      size: 42,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: text.withAlpha(180), fontSize: 14),
+                    ),
+                    const SizedBox(height: 14),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: surface,
+                        foregroundColor: text,
                       ),
-                      const SizedBox(height: 10),
-                      Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: text.withAlpha(180), fontSize: 14),
-                      ),
-                      const SizedBox(height: 14),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: surface,
-                          foregroundColor: text,
-                        ),
-                        icon: const Icon(Icons.refresh_rounded, size: 18),
-                        label: const Text('Retry'),
-                        onPressed: _loadTracks,
-                      ),
-                    ],
-                  ),
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('Retry'),
+                      onPressed: _loadTracks,
+                    ),
+                  ],
                 ),
               ),
             ),
+          ),
 
-          // 6. Empty State
-          if (!_loading && _tracks.isEmpty && _error == null)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(40),
-                child: Center(
-                  child: Text(
-                    'No tracks found in this ${displayType.toLowerCase()}.',
-                    style: TextStyle(color: text.withAlpha(140), fontSize: 14),
-                  ),
+        // 6. Empty State
+        if (!_loading && _tracks.isEmpty && _error == null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(40),
+              child: Center(
+                child: Text(
+                  'No tracks found in this ${displayType.toLowerCase()}.',
+                  style: TextStyle(color: text.withAlpha(140), fontSize: 14),
                 ),
               ),
             ),
+          ),
 
-          // 7. Track List
-          if (filtered.isNotEmpty)
-            SliverList(
+        // 7. Track List
+        if (filtered.isNotEmpty)
+          SliverPadding(
+            padding: EdgeInsets.symmetric(horizontal: isDesktop ? 28 : 0),
+            sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   final track = filtered[index];
                   final isCurrentPlaying = _currentTrack?.id == track.id;
+
+                  if (isDesktop) {
+                    return _DesktopAlbumTrackRow(
+                      index: index + 1,
+                      track: track,
+                      isCurrentPlaying: isCurrentPlaying,
+                      accent: accent,
+                      text: text,
+                      surface: surface,
+                      durStr: _formatDuration(track.duration),
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        widget.playerService.playList(filtered, startIndex: index);
+                      },
+                      onOptions: () => _showTrackOptionsMenu(track),
+                    );
+                  }
 
                   return InkWell(
                     onTap: () {
@@ -1043,7 +1307,6 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
                       ),
                       child: Row(
                         children: [
-                          // Track Number or Equalizer Icon
                           SizedBox(
                             width: 28,
                             child: isCurrentPlaying
@@ -1063,8 +1326,6 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
                                   ),
                           ),
                           const SizedBox(width: 12),
-
-                          // Track Title & Artist
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1092,8 +1353,6 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
                               ],
                             ),
                           ),
-
-                          // Duration
                           if (track.duration != Duration.zero)
                             Text(
                               _formatDuration(track.duration),
@@ -1103,8 +1362,6 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
                               ),
                             ),
                           const SizedBox(width: 8),
-
-                          // 3-Dot Options Menu
                           IconButton(
                             icon: Icon(
                               Icons.more_vert_rounded,
@@ -1121,12 +1378,166 @@ class _AlbumViewScreenState extends State<AlbumViewScreen> {
                 childCount: filtered.length,
               ),
             ),
-
-          // Clearance for bottom player bar
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 120),
           ),
-        ],
+
+        // Clearance
+        const SliverToBoxAdapter(
+          child: SizedBox(height: 60),
+        ),
+      ],
+    );
+
+    if (widget.isEmbedded) {
+      return Material(
+        color: Colors.transparent,
+        child: scrollContent,
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: bg,
+      body: scrollContent,
+    );
+  }
+}
+
+class _DesktopAlbumTrackRow extends StatefulWidget {
+  final int index;
+  final Track track;
+  final bool isCurrentPlaying;
+  final Color accent;
+  final Color text;
+  final Color surface;
+  final String durStr;
+  final VoidCallback onTap;
+  final VoidCallback onOptions;
+
+  const _DesktopAlbumTrackRow({
+    required this.index,
+    required this.track,
+    required this.isCurrentPlaying,
+    required this.accent,
+    required this.text,
+    required this.surface,
+    required this.durStr,
+    required this.onTap,
+    required this.onOptions,
+  });
+
+  @override
+  State<_DesktopAlbumTrackRow> createState() => _DesktopAlbumTrackRowState();
+}
+
+class _DesktopAlbumTrackRowState extends State<_DesktopAlbumTrackRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Material(
+        color: _hovered ? widget.text.withAlpha(18) : Colors.transparent,
+        borderRadius: BorderRadius.circular(4),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: widget.onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            child: Row(
+              children: [
+                // Index or Play Icon
+                SizedBox(
+                  width: 36,
+                  child: Center(
+                    child: widget.isCurrentPlaying
+                        ? Icon(Icons.graphic_eq_rounded, color: widget.accent, size: 18)
+                        : _hovered
+                            ? Icon(Icons.play_arrow_rounded, color: widget.text, size: 20)
+                            : Text(
+                                '${widget.index}',
+                                style: TextStyle(
+                                  color: widget.text.withAlpha(140),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Thumbnail if available
+                if (widget.track.thumbnailUrl != null && widget.track.thumbnailUrl!.isNotEmpty) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: CachedNetworkImage(
+                      imageUrl: widget.track.thumbnailUrl!,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, _, _) => Container(
+                        width: 40,
+                        height: 40,
+                        color: widget.surface,
+                        child: Icon(Icons.music_note, color: widget.text.withAlpha(80), size: 20),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+
+                // Title & Artist
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.track.title,
+                        style: TextStyle(
+                          color: widget.isCurrentPlaying ? widget.accent : widget.text,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.track.author,
+                        style: TextStyle(
+                          color: widget.text.withAlpha(160),
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Duration
+                if (widget.durStr.isNotEmpty)
+                  Text(
+                    widget.durStr,
+                    style: TextStyle(
+                      color: widget.text.withAlpha(140),
+                      fontSize: 13,
+                    ),
+                  ),
+
+                const SizedBox(width: 4),
+
+                // Options Menu Button
+                IconButton(
+                  icon: Icon(Icons.more_horiz_rounded, size: 18, color: widget.text.withAlpha(160)),
+                  splashRadius: 16,
+                  onPressed: widget.onOptions,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

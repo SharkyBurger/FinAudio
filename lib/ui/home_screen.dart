@@ -33,6 +33,7 @@ class HomeTab extends StatefulWidget {
   final VoidCallback onOpenSearch;
   final VoidCallback onOpenSettings;
   final void Function(LocalPlaylist playlist) onOpenPlaylistDetail;
+  final void Function(AlbumViewScreen screen)? onOpenAlbumDetail;
   final bool isDesktop;
 
   const HomeTab({
@@ -45,6 +46,7 @@ class HomeTab extends StatefulWidget {
     required this.onOpenSearch,
     required this.onOpenSettings,
     required this.onOpenPlaylistDetail,
+    this.onOpenAlbumDetail,
     this.isDesktop = false,
   });
 
@@ -65,6 +67,16 @@ class _HomeTabState extends State<HomeTab> {
 
   String? _selectedMood;
   List<SubscribedArtist> _subscribedArtists = [];
+
+  void _openAlbumScreen(AlbumViewScreen screen) {
+    if (widget.onOpenAlbumDetail != null) {
+      widget.onOpenAlbumDetail!(screen);
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => screen),
+      );
+    }
+  }
 
   // Dynamic feed state variables
   List<LocalPlaylistTrack> _dynamicQuickPicks = [];
@@ -2918,19 +2930,17 @@ class _HomeTabState extends State<HomeTab> {
               final album = albums[i];
               return GestureDetector(
                 onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => AlbumViewScreen(
-                        title: album.title,
-                        artist: album.artist,
-                        coverUrl: album.coverUrl,
-                        subtitle: album.subtitle,
-                        isPlaylist: true,
-                        playerService: widget.playerService,
-                        playlistService: widget.playlistService,
-                        settingsService: widget.settingsService,
-                        authService: widget.authService,
-                      ),
+                  _openAlbumScreen(
+                    AlbumViewScreen(
+                      title: album.title,
+                      artist: album.artist,
+                      coverUrl: album.coverUrl,
+                      subtitle: album.subtitle,
+                      isPlaylist: true,
+                      playerService: widget.playerService,
+                      playlistService: widget.playlistService,
+                      settingsService: widget.settingsService,
+                      authService: widget.authService,
                     ),
                   );
                 },
@@ -3275,20 +3285,18 @@ class _HomeTabState extends State<HomeTab> {
                     tracksToPlay = _getNewReleases();
                   }
 
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => AlbumViewScreen(
-                        title: mix.title,
-                        artist: primaryArtist,
-                        subtitle: mix.subtitle,
-                        type: 'Mix',
-                        isPlaylist: true,
-                        initialTracks: tracksToPlay,
-                        playerService: widget.playerService,
-                        playlistService: widget.playlistService,
-                        settingsService: widget.settingsService,
-                        authService: widget.authService,
-                      ),
+                  _openAlbumScreen(
+                    AlbumViewScreen(
+                      title: mix.title,
+                      artist: primaryArtist,
+                      subtitle: mix.subtitle,
+                      type: 'Mix',
+                      isPlaylist: true,
+                      initialTracks: tracksToPlay,
+                      playerService: widget.playerService,
+                      playlistService: widget.playlistService,
+                      settingsService: widget.settingsService,
+                      authService: widget.authService,
                     ),
                   );
                 },
@@ -3718,19 +3726,17 @@ class _HomeTabState extends State<HomeTab> {
               final pl = playlists[i];
               return GestureDetector(
                 onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => AlbumViewScreen(
-                        title: pl.title,
-                        artist: pl.artist,
-                        coverUrl: pl.coverUrl,
-                        subtitle: pl.subtitle,
-                        isPlaylist: true,
-                        playerService: widget.playerService,
-                        playlistService: widget.playlistService,
-                        settingsService: widget.settingsService,
-                        authService: widget.authService,
-                      ),
+                  _openAlbumScreen(
+                    AlbumViewScreen(
+                      title: pl.title,
+                      artist: pl.artist,
+                      coverUrl: pl.coverUrl,
+                      subtitle: pl.subtitle,
+                      isPlaylist: true,
+                      playerService: widget.playerService,
+                      playlistService: widget.playlistService,
+                      settingsService: widget.settingsService,
+                      authService: widget.authService,
                     ),
                   );
                 },
@@ -3948,18 +3954,16 @@ class _HomeTabState extends State<HomeTab> {
               final album = albums[i];
               return GestureDetector(
                 onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => AlbumViewScreen(
-                        title: album.title,
-                        artist: album.artist,
-                        coverUrl: album.coverUrl,
-                        subtitle: album.subtitle,
-                        playerService: widget.playerService,
-                        playlistService: widget.playlistService,
-                        settingsService: widget.settingsService,
-                        authService: widget.authService,
-                      ),
+                  _openAlbumScreen(
+                    AlbumViewScreen(
+                      title: album.title,
+                      artist: album.artist,
+                      coverUrl: album.coverUrl,
+                      subtitle: album.subtitle,
+                      playerService: widget.playerService,
+                      playlistService: widget.playlistService,
+                      settingsService: widget.settingsService,
+                      authService: widget.authService,
                     ),
                   );
                 },

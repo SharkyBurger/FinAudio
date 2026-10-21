@@ -31,6 +31,7 @@ import 'package:finaudio/widgets/add_to_playlist_sheet.dart';
 import 'package:finaudio/widgets/artist_picker_sheet.dart';
 import 'package:finaudio/widgets/google_sign_in_dialog.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:finaudio/ui/album_view_screen.dart';
 
 AudioHandler? audioHandler;
 
@@ -358,37 +359,87 @@ class _MainScaffold extends StatefulWidget {
   State<_MainScaffold> createState() => _MainScaffoldState();
 }
 
+sealed class _DesktopView {
+  const _DesktopView();
+}
+
+class _DesktopTabContent extends _DesktopView {
+  final int index;
+  const _DesktopTabContent(this.index);
+}
+
+class _DesktopPlaylistContent extends _DesktopView {
+  final LocalPlaylist playlist;
+  const _DesktopPlaylistContent(this.playlist);
+}
+
+class _DesktopAlbumContent extends _DesktopView {
+  final AlbumViewScreen albumScreen;
+  const _DesktopAlbumContent(this.albumScreen);
+}
+
 class _MainScaffoldState extends State<_MainScaffold> {
   int _currentIndex = 0;
   Track? _nowPlaying;
   StreamSubscription<Track?>? _trackSub;
-  final List<int> _navHistory = [0];
-  int _historyIndex = 0;
+  final List<_DesktopView> _desktopNavHistory = [const _DesktopTabContent(0)];
+  int _desktopHistoryIndex = 0;
 
-  void _navigateTo(int index) {
-    if (index == _currentIndex) return;
-    if (_historyIndex < _navHistory.length - 1) {
-      _navHistory.removeRange(_historyIndex + 1, _navHistory.length);
+  void _navigateToTab(int index) {
+    if (_desktopNavHistory[_desktopHistoryIndex] is _DesktopTabContent &&
+        (_desktopNavHistory[_desktopHistoryIndex] as _DesktopTabContent).index == index) {
+      return;
     }
-    _navHistory.add(index);
-    _historyIndex = _navHistory.length - 1;
+    if (_desktopHistoryIndex < _desktopNavHistory.length - 1) {
+      _desktopNavHistory.removeRange(_desktopHistoryIndex + 1, _desktopNavHistory.length);
+    }
+    _desktopNavHistory.add(_DesktopTabContent(index));
+    _desktopHistoryIndex = _desktopNavHistory.length - 1;
     setState(() => _currentIndex = index);
   }
 
+  void _navigateToPlaylist(LocalPlaylist playlist) {
+    if (_desktopNavHistory[_desktopHistoryIndex] is _DesktopPlaylistContent &&
+        (_desktopNavHistory[_desktopHistoryIndex] as _DesktopPlaylistContent).playlist.id == playlist.id) {
+      return;
+    }
+    if (_desktopHistoryIndex < _desktopNavHistory.length - 1) {
+      _desktopNavHistory.removeRange(_desktopHistoryIndex + 1, _desktopNavHistory.length);
+    }
+    _desktopNavHistory.add(_DesktopPlaylistContent(playlist));
+    _desktopHistoryIndex = _desktopNavHistory.length - 1;
+    setState(() {});
+  }
+
+  void _navigateToAlbum(AlbumViewScreen screen) {
+    if (_desktopHistoryIndex < _desktopNavHistory.length - 1) {
+      _desktopNavHistory.removeRange(_desktopHistoryIndex + 1, _desktopNavHistory.length);
+    }
+    _desktopNavHistory.add(_DesktopAlbumContent(screen));
+    _desktopHistoryIndex = _desktopNavHistory.length - 1;
+    setState(() {});
+  }
+
   void _goBack() {
-    if (_historyIndex > 0) {
+    if (_desktopHistoryIndex > 0) {
       setState(() {
-        _historyIndex--;
-        _currentIndex = _navHistory[_historyIndex];
+        _desktopHistoryIndex--;
+        final cur = _desktopNavHistory[_desktopHistoryIndex];
+        if (cur is _DesktopTabContent) {
+          _currentIndex = cur.index;
+        }
       });
     }
   }
 
   void _goForward() {
-    if (_historyIndex < _navHistory.length - 1) {
+    if (_desktopHistoryIndex < _desktopNavHistory.length - 1) {
       setState(() {
-        _historyIndex++;
-        _currentIndex = _navHistory[_historyIndex];
+        _desktopHistoryIndex++;
+        final cur = _desktopNavHistory[_desktopHistoryIndex];
+        if (cur is _DesktopTabContent) {
+          _currentIndex = cur.index;
+        }
       });
     }
   }
@@ -427,22 +478,27 @@ class _MainScaffoldState extends State<_MainScaffold> {
         authService: widget.authService,
         playlistService: widget.playlistService,
         settingsService: widget.settingsService,
-        onOpenPlaylists: () => _navigateTo(2),
-        onOpenSearch: () => _navigateTo(1),
-        onOpenSettings: () => _navigateTo(3),
+        onOpenPlaylists: () => isDesktop ? _navigateToTab(2) : setState(() => _currentIndex = 2),
+        onOpenSearch: () => isDesktop ? _navigateToTab(1) : setState(() => _currentIndex = 1),
+        onOpenSettings: () => isDesktop ? _navigateToTab(3) : setState(() => _currentIndex = 3),
         onOpenPlaylistDetail: (playlist) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => LocalPlaylistDetailScreen(
-                playlist: playlist,
-                playlistService: widget.playlistService,
-                playerService: widget.playerService,
-                settingsService: widget.settingsService,
-                authService: widget.authService,
+          if (isDesktop) {
+            _navigateToPlaylist(playlist);
+          } else {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => LocalPlaylistDetailScreen(
+                  playlist: playlist,
+                  playlistService: widget.playlistService,
+                  playerService: widget.playerService,
+                  settingsService: widget.settingsService,
+                  authService: widget.authService,
+                ),
               ),
-            ),
-          );
+            );
+          }
         },
+        onOpenAlbumDetail: isDesktop ? _navigateToAlbum : null,
       ),
       SearchTab(
         playerService: widget.playerService,
@@ -456,20 +512,24 @@ class _MainScaffoldState extends State<_MainScaffold> {
         authService: widget.authService,
         playlistService: widget.playlistService,
         settingsService: widget.settingsService,
-        onGoToSettings: () => _navigateTo(3),
-        onGoToPlayer: () => _navigateTo(0),
+        onGoToSettings: () => isDesktop ? _navigateToTab(3) : setState(() => _currentIndex = 3),
+        onGoToPlayer: () => isDesktop ? _navigateToTab(0) : setState(() => _currentIndex = 0),
         onOpenPlaylistDetail: (playlist) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => LocalPlaylistDetailScreen(
-                playlist: playlist,
-                playlistService: widget.playlistService,
-                playerService: widget.playerService,
-                settingsService: widget.settingsService,
-                authService: widget.authService,
+          if (isDesktop) {
+            _navigateToPlaylist(playlist);
+          } else {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => LocalPlaylistDetailScreen(
+                  playlist: playlist,
+                  playlistService: widget.playlistService,
+                  playerService: widget.playerService,
+                  settingsService: widget.settingsService,
+                  authService: widget.authService,
+                ),
               ),
-            ),
-          );
+            );
+          }
         },
         onOpenYtPlaylistDetail: (playlist) {
           Navigator.of(context).push(
@@ -523,30 +583,33 @@ class _MainScaffoldState extends State<_MainScaffold> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // 1. Left Sidebar Islands (Nav & Library)
-                    SizedBox(
-                      width: 280,
-                      child: _DesktopSidebar(
-                        currentIndex: _currentIndex,
-                        onDestinationSelected: _navigateTo,
-                        accentColor: accentColor,
-                        authService: widget.authService,
-                        playlistService: widget.playlistService,
-                        settingsService: widget.settingsService,
-                        onOpenPlaylistDetail: (playlist) {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => LocalPlaylistDetailScreen(
-                                playlist: playlist,
-                                playlistService: widget.playlistService,
-                                playerService: widget.playerService,
-                                settingsService: widget.settingsService,
-                                authService: widget.authService,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
+                    () {
+                      final cur = _desktopNavHistory[_desktopHistoryIndex];
+                      String? activePlaylistId;
+                      int sidebarTab = _currentIndex;
+                      if (cur is _DesktopPlaylistContent) {
+                        activePlaylistId = cur.playlist.id;
+                        sidebarTab = -1;
+                      } else if (cur is _DesktopTabContent) {
+                        sidebarTab = cur.index;
+                      } else {
+                        sidebarTab = -1;
+                      }
+
+                      return SizedBox(
+                        width: 280,
+                        child: _DesktopSidebar(
+                          currentIndex: sidebarTab,
+                          activePlaylistId: activePlaylistId,
+                          onDestinationSelected: _navigateToTab,
+                          accentColor: accentColor,
+                          authService: widget.authService,
+                          playlistService: widget.playlistService,
+                          settingsService: widget.settingsService,
+                          onOpenPlaylistDetail: _navigateToPlaylist,
+                        ),
+                      );
+                    }(),
                     const SizedBox(width: 8),
 
                     // 2. Main Center Stage Card Island
@@ -572,9 +635,49 @@ class _MainScaffoldState extends State<_MainScaffold> {
                               onAccent,
                             ),
                             Expanded(
-                              child: IndexedStack(
-                                index: _currentIndex.clamp(0, 3),
-                                children: contentTabs,
+                              child: Builder(
+                                builder: (context) {
+                                  final currentView = _desktopNavHistory[_desktopHistoryIndex];
+                                  if (currentView is _DesktopPlaylistContent) {
+                                    return LocalPlaylistDetailScreen(
+                                      key: ValueKey('desktop_playlist_${currentView.playlist.id}'),
+                                      playlist: currentView.playlist,
+                                      playlistService: widget.playlistService,
+                                      playerService: widget.playerService,
+                                      settingsService: widget.settingsService,
+                                      authService: widget.authService,
+                                      isEmbedded: true,
+                                      onBack: _goBack,
+                                    );
+                                  } else if (currentView is _DesktopAlbumContent) {
+                                    final album = currentView.albumScreen;
+                                    return AlbumViewScreen(
+                                      key: ValueKey('desktop_album_${album.title}_${album.artist}'),
+                                      title: album.title,
+                                      artist: album.artist,
+                                      browseId: album.browseId,
+                                      playlistId: album.playlistId,
+                                      coverUrl: album.coverUrl,
+                                      year: album.year,
+                                      type: album.type,
+                                      subtitle: album.subtitle,
+                                      initialTracks: album.initialTracks,
+                                      isPlaylist: album.isPlaylist,
+                                      playerService: widget.playerService,
+                                      playlistService: widget.playlistService,
+                                      settingsService: widget.settingsService,
+                                      authService: widget.authService,
+                                      isEmbedded: true,
+                                      onBack: _goBack,
+                                    );
+                                  } else {
+                                    final tabIdx = (currentView as _DesktopTabContent).index;
+                                    return IndexedStack(
+                                      index: tabIdx.clamp(0, 3),
+                                      children: contentTabs,
+                                    );
+                                  }
+                                },
                               ),
                             ),
                           ],
@@ -670,8 +773,8 @@ class _MainScaffoldState extends State<_MainScaffold> {
     Color textDim,
     Color onAccent,
   ) {
-    final canGoBack = _historyIndex > 0;
-    final canGoForward = _historyIndex < _navHistory.length - 1;
+    final canGoBack = _desktopHistoryIndex > 0;
+    final canGoForward = _desktopHistoryIndex < _desktopNavHistory.length - 1;
     final user = widget.authService.currentUser;
     final isSignedIn = widget.authService.isSignedIn && user != null;
     final headerBg = Color.lerp(surface, bg, 0.25) ?? surface;
@@ -725,7 +828,7 @@ class _MainScaffoldState extends State<_MainScaffold> {
               color: _currentIndex == 3 ? accent : textMuted,
               size: 20,
             ),
-            onPressed: () => _navigateTo(3),
+            onPressed: () => _navigateToTab(3),
           ),
           const SizedBox(width: 8),
           // User Profile Pill / Log In Button
@@ -765,7 +868,7 @@ class _MainScaffoldState extends State<_MainScaffold> {
                     color: surface,
                     onSelected: (val) async {
                       if (val == 'settings') {
-                        _navigateTo(3);
+                        _navigateToTab(3);
                       } else if (val == 'signout') {
                         await widget.authService.signOut();
                       }
@@ -816,6 +919,7 @@ class _DesktopSidebar extends StatefulWidget {
   final PlaylistService playlistService;
   final SettingsService settingsService;
   final ValueChanged<LocalPlaylist> onOpenPlaylistDetail;
+  final String? activePlaylistId;
 
   const _DesktopSidebar({
     required this.currentIndex,
@@ -825,6 +929,7 @@ class _DesktopSidebar extends StatefulWidget {
     required this.playlistService,
     required this.settingsService,
     required this.onOpenPlaylistDetail,
+    this.activePlaylistId,
   });
 
   @override
@@ -1095,7 +1200,9 @@ class _DesktopSidebarState extends State<_DesktopSidebar> {
                     children: [
                       // Pinned Liked Songs Item
                       Material(
-                        color: Colors.transparent,
+                        color: (widget.activePlaylistId == PlaylistService.likedSongsId)
+                            ? widget.accentColor.withAlpha(35)
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(6),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(6),
@@ -1168,7 +1275,9 @@ class _DesktopSidebarState extends State<_DesktopSidebar> {
                       for (final p in playlists) ...[
                         const SizedBox(height: 2),
                         Material(
-                          color: Colors.transparent,
+                          color: (widget.activePlaylistId == p.id)
+                              ? widget.accentColor.withAlpha(35)
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(6),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(6),
@@ -4902,6 +5011,8 @@ class LocalPlaylistDetailScreen extends StatefulWidget {
   final PlayerService playerService;
   final SettingsService? settingsService;
   final GoogleAuthService? authService;
+  final bool isEmbedded;
+  final VoidCallback? onBack;
 
   const LocalPlaylistDetailScreen({
     super.key,
@@ -4910,6 +5021,8 @@ class LocalPlaylistDetailScreen extends StatefulWidget {
     required this.playerService,
     this.settingsService,
     this.authService,
+    this.isEmbedded = false,
+    this.onBack,
   });
 
   @override
@@ -5948,18 +6061,52 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final settings = widget.settingsService ?? SettingsService.instance!;
+    final bg = settings.backgroundColor;
+    final surface = settings.surfaceColor;
+    final accent = settings.accentColor;
+    final text = settings.textColor;
+    final textDim = text.withAlpha(120);
+    final onAccent = accent.computeLuminance() > 0.5 ? const Color(0xFF101010) : const Color(0xFFFFFFFF);
+    final isDesktop = MediaQuery.of(context).size.width >= 800 || widget.isEmbedded;
     final isSpotify = _playlist.isSpotify;
     final sortedTracks = _getSortedTracks();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      body: CustomScrollView(
-        slivers: [
+    String formatTotalDuration() {
+      final totalSecs = _playlist.tracks.fold<int>(0, (acc, t) => acc + t.duration.inSeconds);
+      if (totalSecs == 0) return '';
+      final dur = Duration(seconds: totalSecs);
+      if (dur.inHours > 0) {
+        return '${dur.inHours} hr ${dur.inMinutes % 60} min';
+      }
+      return '${dur.inMinutes} min';
+    }
+    final totalDurationStr = formatTotalDuration();
+
+    final displayedTracks = _searchQuery.isEmpty
+        ? sortedTracks
+        : sortedTracks.where((t) {
+            final q = _searchQuery.toLowerCase();
+            return t.title.toLowerCase().contains(q) || t.artist.toLowerCase().contains(q);
+          }).toList();
+
+    final scrollContent = CustomScrollView(
+      slivers: [
+        if (!isDesktop)
           SliverAppBar(
             expandedHeight: 220,
             pinned: true,
-            backgroundColor: const Color(0xFF121212),
+            backgroundColor: bg,
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back_ios_new_rounded, color: text, size: 20),
+              onPressed: () {
+                if (widget.onBack != null) {
+                  widget.onBack!();
+                } else {
+                  Navigator.of(context).pop();
+                }
+              },
+            ),
             actions: [
               if (!_playlist.isLikedSongs)
                 IconButton(
@@ -6103,15 +6250,15 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
                             _playlist.thumbnailUrl,
                             fit: BoxFit.cover,
                             errorBuilder: (_, _, _) => Container(
-                              color: isSpotify ? const Color(0xFF0D2513) : const Color(0xFF1A1A2E),
+                              color: surface,
                             ),
                           ),
-                          const DecoratedBox(
+                          DecoratedBox(
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
-                                colors: [Colors.transparent, Color(0xFF121212)],
+                                colors: [Colors.transparent, bg],
                               ),
                             ),
                           ),
@@ -6119,9 +6266,9 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
                       )
                     : (_playlist.isLikedSongs
                         ? Container(
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [Color(0xFF450AF5), Color(0xFF8E8EE5)],
+                                colors: [accent, Color.lerp(accent, surface, 0.45) ?? accent],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
@@ -6151,7 +6298,7 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
                             ),
                           )
                         : Container(
-                            color: isSpotify ? const Color(0xFF0D2513) : const Color(0xFF1A1A2E),
+                            color: surface,
                             child: Center(
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
@@ -6159,7 +6306,7 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
                                   Icon(
                                     isSpotify ? Icons.graphic_eq : Icons.queue_music_rounded,
                                     size: 54,
-                                    color: isSpotify ? const Color(0xFF1DB954) : const Color(0xFF555555),
+                                    color: accent,
                                   ),
                                   const SizedBox(height: 6),
                                   Container(
@@ -6183,7 +6330,394 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
                           )),
               ),
             ),
+          )
+        else if (!widget.isEmbedded)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.arrow_back_rounded, color: text),
+                    tooltip: 'Back',
+                    onPressed: () {
+                      if (widget.onBack != null) {
+                        widget.onBack!();
+                      } else {
+                        Navigator.of(context).pop();
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
           ),
+
+        // Desktop Spotify Header Banner
+        if (isDesktop)
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(28, 20, 28, 16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    accent.withAlpha(35),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // Cover Artwork (192x192 with drop shadow)
+                  GestureDetector(
+                    onTap: _showEditPlaylistDialog,
+                    child: Container(
+                      width: 192,
+                      height: 192,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withAlpha(120),
+                            blurRadius: 24,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _playlist.thumbnailUrl.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: _playlist.thumbnailUrl,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, _, _) => Container(color: surface),
+                            )
+                          : (_playlist.isLikedSongs
+                              ? Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        accent,
+                                        Color.lerp(accent, surface, 0.45) ?? accent,
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                  ),
+                                  child: const Center(
+                                    child: Icon(Icons.favorite_rounded, size: 72, color: Colors.white),
+                                  ),
+                                )
+                              : Container(
+                                  color: surface,
+                                  child: Center(
+                                    child: Icon(
+                                      isSpotify ? Icons.graphic_eq_rounded : Icons.queue_music_rounded,
+                                      size: 64,
+                                      color: accent,
+                                    ),
+                                  ),
+                                )),
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                  // Title & Meta Info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'PLAYLIST',
+                          style: TextStyle(
+                            color: text.withAlpha(180),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _playlist.title,
+                          style: TextStyle(
+                            color: text,
+                            fontSize: 36,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.6,
+                            height: 1.15,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 11,
+                              backgroundColor: accent.withAlpha(40),
+                              child: Icon(Icons.person_rounded, size: 13, color: accent),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              widget.authService?.currentUser?.displayName ?? 'FinAudio',
+                              style: TextStyle(
+                                color: text,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            Text(' • ', style: TextStyle(color: text.withAlpha(140), fontSize: 13)),
+                            Text(
+                              '${_playlist.tracks.length} ${_playlist.tracks.length == 1 ? 'song' : 'songs'}',
+                              style: TextStyle(color: text.withAlpha(160), fontSize: 13),
+                            ),
+                            if (totalDurationStr.isNotEmpty)
+                              Text(', $totalDurationStr', style: TextStyle(color: text.withAlpha(130), fontSize: 13)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // Desktop Action Toolbar
+        if (isDesktop)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+              child: Row(
+                children: [
+                  // Play button
+                  Material(
+                    color: accent,
+                    shape: const CircleBorder(),
+                    elevation: 3,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: _playAll,
+                      child: SizedBox(
+                        width: 52,
+                        height: 52,
+                        child: Center(
+                          child: Icon(
+                            Icons.play_arrow_rounded,
+                            size: 32,
+                            color: onAccent,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  IconButton(
+                    iconSize: 22,
+                    icon: Icon(Icons.shuffle_rounded, color: text.withAlpha(190)),
+                    tooltip: 'Shuffle',
+                    onPressed: () => _playAll(shuffle: true),
+                  ),
+                  IconButton(
+                    iconSize: 22,
+                    icon: Icon(Icons.download_rounded, color: text.withAlpha(190)),
+                    tooltip: 'Download playlist',
+                    onPressed: _downloadAllTracks,
+                  ),
+                  if (!_playlist.isLikedSongs)
+                    IconButton(
+                      iconSize: 22,
+                      icon: const Icon(Icons.favorite_rounded, color: Color(0xFFFF5252)),
+                      tooltip: 'Add all to Liked Songs',
+                      onPressed: _addAllToLikedSongs,
+                    ),
+                  IconButton(
+                    iconSize: 22,
+                    icon: Icon(Icons.sort_rounded, color: text.withAlpha(190)),
+                    tooltip: _getSortButtonLabel(),
+                    onPressed: _showSortModal,
+                  ),
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_horiz_rounded, color: text.withAlpha(190), size: 22),
+                    tooltip: 'More options',
+                    color: surface,
+                    onSelected: (val) {
+                      switch (val) {
+                        case 'edit':
+                          _showEditPlaylistDialog();
+                          break;
+                        case 'sync':
+                          if (isSpotify && !_syncing) _sync();
+                          break;
+                        case 'auto_cover':
+                          _autoFetchCoverIfMissing(force: true);
+                          break;
+                        case 'fetch_artworks':
+                          _fetchTrackArtworks();
+                          break;
+                        case 'delete':
+                          _deletePlaylist();
+                          break;
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: Text(_playlist.isLikedSongs ? 'Change Cover Picture' : 'Edit Cover & Title', style: TextStyle(color: text)),
+                      ),
+                      if (isSpotify)
+                        PopupMenuItem(
+                          value: 'sync',
+                          child: Text('Sync with Spotify', style: TextStyle(color: text)),
+                        ),
+                      if (!_playlist.isLikedSongs)
+                        PopupMenuItem(
+                          value: 'auto_cover',
+                          child: Text('Auto-fetch Cover Art', style: TextStyle(color: text)),
+                        ),
+                      PopupMenuItem(
+                        value: 'fetch_artworks',
+                        child: Text('Fetch Track Artworks', style: TextStyle(color: text)),
+                      ),
+                      if (!_playlist.isLikedSongs) ...[
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete Playlist', style: TextStyle(color: Color(0xFFCF6679))),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const Spacer(),
+                  // Search within playlist
+                  Container(
+                    width: 220,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: text.withAlpha(22)),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.search_rounded, size: 16, color: text.withAlpha(140)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            style: TextStyle(fontSize: 12, color: text),
+                            decoration: InputDecoration(
+                              hintText: 'Search in playlist',
+                              hintStyle: TextStyle(fontSize: 11, color: text.withAlpha(120)),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                          ),
+                        ),
+                        if (_searchQuery.isNotEmpty)
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                            child: Icon(Icons.close_rounded, size: 14, color: text.withAlpha(140)),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        if (_fetchingArtworks)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: isDesktop ? 28 : 16, vertical: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: accent.withAlpha(30),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: accent.withAlpha(80)),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Fetching track artworks: $_fetchingArtworksProgress',
+                      style: TextStyle(fontSize: 12, color: accent, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+        // Desktop Table Header
+        if (isDesktop && displayedTracks.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 44,
+                          child: Text(
+                            '#',
+                            style: TextStyle(
+                              color: text.withAlpha(140),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Title',
+                            style: TextStyle(
+                              color: text.withAlpha(140),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 100,
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Icon(Icons.access_time_rounded, size: 16, color: text.withAlpha(140)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, thickness: 1, color: text.withAlpha(20)),
+                  const SizedBox(height: 4),
+                ],
+              ),
+            ),
+          ),
+
+        // Mobile Controls (if not desktop)
+        if (!isDesktop)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -6221,38 +6755,8 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
                         icon: const Icon(Icons.sort_rounded, size: 16),
                         label: Text(_getSortButtonLabel()),
                       ),
-                      if (isSpotify)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1DB954).withAlpha(40),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.graphic_eq, size: 14, color: Color(0xFF1DB954)),
-                              SizedBox(width: 4),
-                              Text(
-                                'Spotify',
-                                style: TextStyle(
-                                  color: Color(0xFF1DB954),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                     ],
                   ),
-                  if (_playlist.lastSyncedAt != null && isSpotify) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'Last synced: ${_playlist.lastSyncedAt!.toLocal().toString().split('.').first}',
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF777777)),
-                    ),
-                  ],
                   if (_playlist.tracks.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     TextField(
@@ -6271,7 +6775,7 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
                               )
                             : null,
                         filled: true,
-                        fillColor: const Color(0xFF1E1E1E),
+                        fillColor: surface,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -6279,223 +6783,387 @@ class _LocalPlaylistDetailScreenState extends State<LocalPlaylistDetailScreen> {
                         ),
                       ),
                     ),
-                    if (_searchQuery.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          () {
-                            final count = sortedTracks.where((t) {
-                              final q = _searchQuery.toLowerCase();
-                              return t.title.toLowerCase().contains(q) || t.artist.toLowerCase().contains(q);
-                            }).length;
-                            return 'Found $count of ${_playlist.tracks.length} songs';
-                          }(),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF1DB954),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    if (_fetchingArtworks)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1DB954).withAlpha(30),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFF1DB954).withAlpha(80), width: 0.8),
-                          ),
-                          child: Row(
-                            children: [
-                              const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFF1DB954),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Fetching track artworks: $_fetchingArtworksProgress',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF1DB954),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
                   ],
                 ],
               ),
             ),
           ),
-          () {
-            final displayedTracks = _searchQuery.isEmpty
-                ? sortedTracks
-                : sortedTracks.where((t) {
-                    final q = _searchQuery.toLowerCase();
-                    return t.title.toLowerCase().contains(q) || t.artist.toLowerCase().contains(q);
-                  }).toList();
 
-            if (_playlist.tracks.isEmpty) {
-              return const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.only(top: 60),
-                  child: Center(
-                    child: Text('No tracks in this playlist.', style: TextStyle(color: Color(0xFF707070))),
-                  ),
-                ),
-              );
-            }
-
-            if (displayedTracks.isEmpty) {
-              return SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 60),
-                  child: Center(
-                    child: Text('No songs matching "$_searchQuery"', style: const TextStyle(color: Color(0xFF707070))),
-                  ),
-                ),
-              );
-            }
-
-            return SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final track = displayedTracks[index];
-                    final sortedIndex = sortedTracks.indexOf(track);
-                    final durStr = _fmtDuration(track.duration);
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        side: const BorderSide(color: Color(0xFF222222)),
-                      ),
-                      child: ListTile(
-                        leading: ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: Builder(
-                            builder: (context) {
-                              final thumb = track.thumbnailUrl;
-                              final fallback = _indexBox(sortedIndex >= 0 ? sortedIndex + 1 : index + 1);
-                              if (thumb == null || thumb.trim().isEmpty) {
-                                return fallback;
-                              }
-                              if (thumb.startsWith('http')) {
-                                return Image.network(
-                                  thumb,
-                                  width: 42,
-                                  height: 42,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, _, _) => fallback,
-                                );
-                              }
-                              final cleanPath = thumb.startsWith('file://') ? Uri.parse(thumb).toFilePath() : thumb;
-                              if (File(cleanPath).existsSync()) {
-                                return Image.file(
-                                  File(cleanPath),
-                                  width: 42,
-                                  height: 42,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, _, _) => fallback,
-                                );
-                              }
-                              return fallback;
-                            },
-                          ),
-                        ),
-                        title: Text(
-                          track.title,
-                          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: GestureDetector(
-                          onTap: (widget.authService != null && widget.settingsService != null)
-                              ? () {
-                                  navigateToArtistOrShowPicker(
-                                    context: context,
-                                    artists: track.individualArtists,
-                                    playerService: widget.playerService,
-                                    authService: widget.authService!,
-                                    playlistService: widget.playlistService,
-                                    settingsService: widget.settingsService!,
-                                    trackTitle: track.title,
-                                    initialImageUrl: track.thumbnailUrl,
-                                  );
-                                }
-                              : null,
-                          child: Text(
-                            durStr.isNotEmpty ? '${track.formattedArtist} · $durStr' : track.formattedArtist,
-                            style: const TextStyle(fontSize: 12, color: Color(0xFF888888)),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        onLongPress: () => _showTrackOptions(track),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Builder(
-                              builder: (ctx) {
-                                final isLiked = widget.playlistService.isTrackLiked(
-                                  track.youtubeVideoId,
-                                  track.title,
-                                  track.artist,
-                                );
-                                return IconButton(
-                                  icon: Icon(
-                                    isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                                    color: isLiked ? const Color(0xFFFF5252) : const Color(0xFF888888),
-                                    size: 20,
-                                  ),
-                                  tooltip: isLiked ? 'In Liked Songs' : 'Save to playlist',
-                                  onPressed: () {
-                                    showAddToPlaylistSheet(
-                                      context: context,
-                                      track: track,
-                                      playlistService: widget.playlistService,
-                                      accentColor: theme.colorScheme.primary,
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.more_vert_rounded, size: 20),
-                              color: const Color(0xFF888888),
-                              tooltip: 'More options',
-                              onPressed: () => _showTrackOptions(track),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.play_arrow_rounded),
-                              color: theme.colorScheme.primary,
-                              onPressed: () => _playTrack(sortedIndex >= 0 ? sortedIndex : index),
-                            ),
-                          ],
-                        ),
-                        onTap: () => _playTrack(sortedIndex >= 0 ? sortedIndex : index),
-                      ),
-                    );
-                  },
-                  childCount: displayedTracks.length,
+        // Tracks List
+        () {
+          if (_playlist.tracks.isEmpty) {
+            return SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 60),
+                child: Center(
+                  child: Text('No tracks in this playlist.', style: TextStyle(color: textDim)),
                 ),
               ),
             );
-          }(),
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
-        ],
+          }
+
+          if (displayedTracks.isEmpty) {
+            return SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 60),
+                child: Center(
+                  child: Text('No songs matching "$_searchQuery"', style: TextStyle(color: textDim)),
+                ),
+              ),
+            );
+          }
+
+          return SliverPadding(
+            padding: EdgeInsets.symmetric(horizontal: isDesktop ? 28 : 8),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final track = displayedTracks[index];
+                  final sortedIndex = sortedTracks.indexOf(track);
+                  final durStr = _fmtDuration(track.duration);
+                  final isLiked = widget.playlistService.isTrackLiked(
+                    track.youtubeVideoId,
+                    track.title,
+                    track.artist,
+                  );
+
+                  if (isDesktop) {
+                    return _DesktopPlaylistTrackRow(
+                      index: index + 1,
+                      track: track,
+                      isCurrentPlaying: false,
+                      isLiked: isLiked,
+                      accent: accent,
+                      text: text,
+                      surface: surface,
+                      durStr: durStr,
+                      onTap: () => _playTrack(sortedIndex >= 0 ? sortedIndex : index),
+                      onToggleLike: () {
+                        showAddToPlaylistSheet(
+                          context: context,
+                          track: track,
+                          playlistService: widget.playlistService,
+                          accentColor: accent,
+                        );
+                      },
+                      onOptions: () => _showTrackOptions(track),
+                      onArtistTap: (widget.authService != null && widget.settingsService != null)
+                          ? () {
+                              navigateToArtistOrShowPicker(
+                                context: context,
+                                artists: track.individualArtists,
+                                playerService: widget.playerService,
+                                authService: widget.authService!,
+                                playlistService: widget.playlistService,
+                                settingsService: widget.settingsService!,
+                                trackTitle: track.title,
+                                initialImageUrl: track.thumbnailUrl,
+                              );
+                            }
+                          : null,
+                    );
+                  }
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    color: surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      side: BorderSide(color: text.withAlpha(20)),
+                    ),
+                    child: ListTile(
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Builder(
+                          builder: (context) {
+                            final thumb = track.thumbnailUrl;
+                            final fallback = _indexBox(sortedIndex >= 0 ? sortedIndex + 1 : index + 1);
+                            if (thumb == null || thumb.trim().isEmpty) {
+                              return fallback;
+                            }
+                            if (thumb.startsWith('http')) {
+                              return Image.network(
+                                thumb,
+                                width: 42,
+                                height: 42,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => fallback,
+                              );
+                            }
+                            final cleanPath = thumb.startsWith('file://') ? Uri.parse(thumb).toFilePath() : thumb;
+                            if (File(cleanPath).existsSync()) {
+                              return Image.file(
+                                File(cleanPath),
+                                width: 42,
+                                height: 42,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => fallback,
+                              );
+                            }
+                            return fallback;
+                          },
+                        ),
+                      ),
+                      title: Text(
+                        track.title,
+                        style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14, color: text),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: GestureDetector(
+                        onTap: (widget.authService != null && widget.settingsService != null)
+                            ? () {
+                                navigateToArtistOrShowPicker(
+                                  context: context,
+                                  artists: track.individualArtists,
+                                  playerService: widget.playerService,
+                                  authService: widget.authService!,
+                                  playlistService: widget.playlistService,
+                                  settingsService: widget.settingsService!,
+                                  trackTitle: track.title,
+                                  initialImageUrl: track.thumbnailUrl,
+                                );
+                              }
+                            : null,
+                        child: Text(
+                          durStr.isNotEmpty ? '${track.formattedArtist} · $durStr' : track.formattedArtist,
+                          style: TextStyle(fontSize: 12, color: textDim),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      onLongPress: () => _showTrackOptions(track),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(
+                              isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                              color: isLiked ? const Color(0xFFFF5252) : textDim,
+                              size: 20,
+                            ),
+                            tooltip: isLiked ? 'In Liked Songs' : 'Save to playlist',
+                            onPressed: () {
+                              showAddToPlaylistSheet(
+                                context: context,
+                                track: track,
+                                playlistService: widget.playlistService,
+                                accentColor: accent,
+                              );
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.more_vert_rounded, size: 20),
+                            color: textDim,
+                            tooltip: 'More options',
+                            onPressed: () => _showTrackOptions(track),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.play_arrow_rounded),
+                            color: accent,
+                            onPressed: () => _playTrack(sortedIndex >= 0 ? sortedIndex : index),
+                          ),
+                        ],
+                      ),
+                      onTap: () => _playTrack(sortedIndex >= 0 ? sortedIndex : index),
+                    ),
+                  );
+                },
+                childCount: displayedTracks.length,
+              ),
+            ),
+          );
+        }(),
+        const SliverToBoxAdapter(child: SizedBox(height: 60)),
+      ],
+    );
+
+    if (widget.isEmbedded) {
+      return Material(
+        color: Colors.transparent,
+        child: scrollContent,
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: bg,
+      body: scrollContent,
+    );
+  }
+}
+
+class _DesktopPlaylistTrackRow extends StatefulWidget {
+  final int index;
+  final LocalPlaylistTrack track;
+  final bool isCurrentPlaying;
+  final bool isLiked;
+  final Color accent;
+  final Color text;
+  final Color surface;
+  final String durStr;
+  final VoidCallback onTap;
+  final VoidCallback onToggleLike;
+  final VoidCallback onOptions;
+  final VoidCallback? onArtistTap;
+
+  const _DesktopPlaylistTrackRow({
+    required this.index,
+    required this.track,
+    required this.isCurrentPlaying,
+    required this.isLiked,
+    required this.accent,
+    required this.text,
+    required this.surface,
+    required this.durStr,
+    required this.onTap,
+    required this.onToggleLike,
+    required this.onOptions,
+    this.onArtistTap,
+  });
+
+  @override
+  State<_DesktopPlaylistTrackRow> createState() => _DesktopPlaylistTrackRowState();
+}
+
+class _DesktopPlaylistTrackRowState extends State<_DesktopPlaylistTrackRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Material(
+        color: _hovered ? widget.text.withAlpha(18) : Colors.transparent,
+        borderRadius: BorderRadius.circular(4),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: widget.onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            child: Row(
+              children: [
+                // Index or Play Icon
+                SizedBox(
+                  width: 36,
+                  child: Center(
+                    child: widget.isCurrentPlaying
+                        ? Icon(Icons.graphic_eq_rounded, color: widget.accent, size: 18)
+                        : _hovered
+                            ? Icon(Icons.play_arrow_rounded, color: widget.text, size: 20)
+                            : Text(
+                                '${widget.index}',
+                                style: TextStyle(
+                                  color: widget.text.withAlpha(140),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Artwork Thumbnail
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Builder(
+                    builder: (context) {
+                      final thumb = widget.track.thumbnailUrl;
+                      if (thumb != null && thumb.isNotEmpty && thumb.startsWith('http')) {
+                        return CachedNetworkImage(
+                          imageUrl: thumb,
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, _, _) => Container(
+                            width: 40,
+                            height: 40,
+                            color: widget.surface,
+                            child: Icon(Icons.music_note, color: widget.text.withAlpha(80), size: 20),
+                          ),
+                        );
+                      }
+                      return Container(
+                        width: 40,
+                        height: 40,
+                        color: widget.surface,
+                        child: Icon(Icons.music_note, color: widget.text.withAlpha(80), size: 20),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Title & Artist
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.track.title,
+                        style: TextStyle(
+                          color: widget.isCurrentPlaying ? widget.accent : widget.text,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: widget.onArtistTap,
+                        child: Text(
+                          widget.track.formattedArtist,
+                          style: TextStyle(
+                            color: widget.text.withAlpha(160),
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                // Duration
+                if (widget.durStr.isNotEmpty)
+                  Text(
+                    widget.durStr,
+                    style: TextStyle(
+                      color: widget.text.withAlpha(140),
+                      fontSize: 13,
+                    ),
+                  ),
+
+                const SizedBox(width: 8),
+
+                // Heart Button
+                IconButton(
+                  icon: Icon(
+                    widget.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                    color: widget.isLiked ? const Color(0xFFFF5252) : widget.text.withAlpha(150),
+                    size: 18,
+                  ),
+                  splashRadius: 16,
+                  tooltip: widget.isLiked ? 'In Liked Songs' : 'Save to Liked Songs',
+                  onPressed: widget.onToggleLike,
+                ),
+
+                // Options Menu Button
+                IconButton(
+                  icon: Icon(Icons.more_horiz_rounded, size: 18, color: widget.text.withAlpha(160)),
+                  splashRadius: 16,
+                  onPressed: widget.onOptions,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
