@@ -29,7 +29,7 @@ import 'package:finaudio/ui/downloads_screen.dart';
 import 'package:finaudio/models/search_result.dart';
 import 'package:finaudio/widgets/add_to_playlist_sheet.dart';
 import 'package:finaudio/widgets/artist_picker_sheet.dart';
-import 'package:finaudio/ui/desktop/desktop_spotify_shell.dart';
+import 'package:finaudio/widgets/google_sign_in_dialog.dart';
 
 AudioHandler? audioHandler;
 
@@ -358,7 +358,6 @@ class _MainScaffold extends StatefulWidget {
 }
 
 class _MainScaffoldState extends State<_MainScaffold> {
-  final GlobalKey<DesktopSpotifyShellState> _desktopShellKey = GlobalKey<DesktopSpotifyShellState>();
   int _currentIndex = 0;
   Track? _nowPlaying;
   StreamSubscription<Track?>? _trackSub;
@@ -389,51 +388,28 @@ class _MainScaffoldState extends State<_MainScaffold> {
     if (mounted) setState(() {});
   }
 
-  List<Widget> _buildContentTabs(Color accentColor, {bool isDesktop = false}) {
+  List<Widget> _buildContentTabs(Color accentColor) {
     return [
       HomeTab(
-        isDesktop: isDesktop,
         playerService: widget.playerService,
         authService: widget.authService,
         playlistService: widget.playlistService,
         settingsService: widget.settingsService,
-        onOpenPlaylists: () {
-          if (isDesktop) {
-            _desktopShellKey.currentState?.navigateTo(tabIndex: 2);
-          } else {
-            setState(() => _currentIndex = 2);
-          }
-        },
-        onOpenSearch: () {
-          if (isDesktop) {
-            _desktopShellKey.currentState?.navigateTo(tabIndex: 1);
-          } else {
-            setState(() => _currentIndex = 1);
-          }
-        },
-        onOpenSettings: () {
-          if (isDesktop) {
-            _desktopShellKey.currentState?.navigateTo(tabIndex: 3);
-          } else {
-            setState(() => _currentIndex = 3);
-          }
-        },
+        onOpenPlaylists: () => setState(() => _currentIndex = 2),
+        onOpenSearch: () => setState(() => _currentIndex = 1),
+        onOpenSettings: () => setState(() => _currentIndex = 3),
         onOpenPlaylistDetail: (playlist) {
-          if (isDesktop) {
-            _desktopShellKey.currentState?.navigateTo(playlist: playlist);
-          } else {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => LocalPlaylistDetailScreen(
-                  playlist: playlist,
-                  playerService: widget.playerService,
-                  playlistService: widget.playlistService,
-                  settingsService: widget.settingsService,
-                  authService: widget.authService,
-                ),
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => LocalPlaylistDetailScreen(
+                playlist: playlist,
+                playerService: widget.playerService,
+                playlistService: widget.playlistService,
+                settingsService: widget.settingsService,
+                authService: widget.authService,
               ),
-            );
-          }
+            ),
+          );
         },
       ),
       SearchTab(
@@ -448,36 +424,20 @@ class _MainScaffoldState extends State<_MainScaffold> {
         authService: widget.authService,
         playlistService: widget.playlistService,
         settingsService: widget.settingsService,
-        onGoToSettings: () {
-          if (isDesktop) {
-            _desktopShellKey.currentState?.navigateTo(tabIndex: 3);
-          } else {
-            setState(() => _currentIndex = 3);
-          }
-        },
-        onGoToPlayer: () {
-          if (isDesktop) {
-            _desktopShellKey.currentState?.navigateTo(tabIndex: 0);
-          } else {
-            setState(() => _currentIndex = 0);
-          }
-        },
+        onGoToSettings: () => setState(() => _currentIndex = 3),
+        onGoToPlayer: () => setState(() => _currentIndex = 0),
         onOpenPlaylistDetail: (playlist) {
-          if (isDesktop) {
-            _desktopShellKey.currentState?.navigateTo(playlist: playlist);
-          } else {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => LocalPlaylistDetailScreen(
-                  playlist: playlist,
-                  playlistService: widget.playlistService,
-                  playerService: widget.playerService,
-                  settingsService: widget.settingsService,
-                  authService: widget.authService,
-                ),
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => LocalPlaylistDetailScreen(
+                playlist: playlist,
+                playlistService: widget.playlistService,
+                playerService: widget.playerService,
+                settingsService: widget.settingsService,
+                authService: widget.authService,
               ),
-            );
-          }
+            ),
+          );
         },
         onOpenYtPlaylistDetail: (playlist) {
           Navigator.of(context).push(
@@ -506,18 +466,56 @@ class _MainScaffoldState extends State<_MainScaffold> {
   Widget build(BuildContext context) {
     final accentColor = widget.settingsService.accentColor;
     final isDesktop = MediaQuery.of(context).size.width >= 800;
-    final contentTabs = _buildContentTabs(accentColor, isDesktop: isDesktop);
+    final contentTabs = _buildContentTabs(accentColor);
 
     if (isDesktop) {
-      return DesktopSpotifyShell(
-        key: _desktopShellKey,
-        accentColor: accentColor,
-        playerService: widget.playerService,
-        authService: widget.authService,
-        playlistService: widget.playlistService,
-        settingsService: widget.settingsService,
-        contentTabs: contentTabs,
-        onSettingsChanged: widget.onSettingsChanged,
+      return Scaffold(
+        body: Column(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  _DesktopSidebar(
+                    currentIndex: _currentIndex,
+                    onDestinationSelected: (i) => setState(() => _currentIndex = i),
+                    accentColor: accentColor,
+                    authService: widget.authService,
+                    playlistService: widget.playlistService,
+                    settingsService: widget.settingsService,
+                    onOpenPlaylistDetail: (playlist) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => LocalPlaylistDetailScreen(
+                            playlist: playlist,
+                            playlistService: widget.playlistService,
+                            playerService: widget.playerService,
+                            settingsService: widget.settingsService,
+                            authService: widget.authService,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const VerticalDivider(width: 1, thickness: 1),
+                  Expanded(
+                    child: IndexedStack(
+                      index: _currentIndex.clamp(0, 3),
+                      children: contentTabs,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            DesktopPlayerBar(
+              track: _nowPlaying,
+              accentColor: accentColor,
+              playerService: widget.playerService,
+              authService: widget.authService,
+              playlistService: widget.playlistService,
+              settingsService: widget.settingsService,
+            ),
+          ],
+        ),
       );
     }
 
@@ -574,6 +572,469 @@ class _MainScaffoldState extends State<_MainScaffold> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopSidebar extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onDestinationSelected;
+  final Color accentColor;
+  final GoogleAuthService authService;
+  final PlaylistService playlistService;
+  final SettingsService settingsService;
+  final ValueChanged<LocalPlaylist> onOpenPlaylistDetail;
+
+  const _DesktopSidebar({
+    required this.currentIndex,
+    required this.onDestinationSelected,
+    required this.accentColor,
+    required this.authService,
+    required this.playlistService,
+    required this.settingsService,
+    required this.onOpenPlaylistDetail,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final surface = theme.colorScheme.surface;
+    final text = theme.colorScheme.onSurface;
+    final user = authService.currentUser;
+    final isSignedIn = authService.isSignedIn && user != null;
+
+    final likedSongs = playlistService.likedSongsPlaylist;
+    final otherPlaylists = playlistService.playlists
+        .where((p) => p.id != PlaylistService.likedSongsId)
+        .toList();
+
+    return Container(
+      width: 240,
+      color: surface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Logo & Branding
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: accentColor.withAlpha(35),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: accentColor.withAlpha(70)),
+                  ),
+                  child: Center(
+                    child: Icon(Icons.graphic_eq_rounded, color: accentColor, size: 22),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'FinAudio',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: text,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    Text(
+                      'Desktop Player',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          // Main Navigation
+          _SidebarItem(
+            icon: currentIndex == 0 ? Icons.home_rounded : Icons.home_outlined,
+            label: 'Home',
+            isSelected: currentIndex == 0,
+            accentColor: accentColor,
+            onTap: () => onDestinationSelected(0),
+          ),
+          _SidebarItem(
+            icon: currentIndex == 1 ? Icons.search_rounded : Icons.search_outlined,
+            label: 'Search',
+            isSelected: currentIndex == 1,
+            accentColor: accentColor,
+            onTap: () => onDestinationSelected(1),
+          ),
+          _SidebarItem(
+            icon: currentIndex == 2 ? Icons.local_library_rounded : Icons.local_library_outlined,
+            label: 'Library',
+            isSelected: currentIndex == 2,
+            accentColor: accentColor,
+            onTap: () => onDestinationSelected(2),
+          ),
+          _SidebarItem(
+            icon: currentIndex == 3 ? Icons.settings_rounded : Icons.settings_outlined,
+            label: 'Settings',
+            isSelected: currentIndex == 3,
+            accentColor: accentColor,
+            onTap: () => onDestinationSelected(3),
+          ),
+
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Divider(height: 1),
+          ),
+
+          // Library Playlists Header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Row(
+              children: [
+                Text(
+                  'YOUR PLAYLISTS',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  tooltip: 'Create Playlist',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                  onPressed: () => _showCreatePlaylistDialog(context),
+                ),
+              ],
+            ),
+          ),
+
+          // Liked Songs Item
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => onOpenPlaylistDetail(likedSongs),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          gradient: LinearGradient(
+                            colors: [accentColor, accentColor.withAlpha(160)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: const Icon(Icons.favorite_rounded, color: Colors.black, size: 16),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Liked Songs',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: text,
+                              ),
+                            ),
+                            Text(
+                              '${likedSongs.tracks.length} tracks',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Scrollable Playlists
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+              itemCount: otherPlaylists.length,
+              itemBuilder: (context, i) {
+                final p = otherPlaylists[i];
+                return Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => onOpenPlaylistDetail(p),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.queue_music_rounded,
+                            size: 18,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              p.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: text.withAlpha(220),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const Divider(height: 1),
+
+          // Bottom Account Tile / Google Login
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: isSignedIn
+                ? Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest.withAlpha(120),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        if (user.photoUrl != null && user.photoUrl!.isNotEmpty)
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundImage: NetworkImage(user.photoUrl!),
+                          )
+                        else
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor: accentColor.withAlpha(40),
+                            child: Icon(Icons.person, color: accentColor, size: 18),
+                          ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                user.displayName ?? 'YouTube User',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: text,
+                                ),
+                              ),
+                              Text(
+                                user.email,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuButton<String>(
+                          icon: Icon(Icons.more_vert_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                          onSelected: (val) async {
+                            if (val == 'settings') {
+                              onDestinationSelected(3);
+                            } else if (val == 'signout') {
+                              await authService.signOut();
+                            }
+                          },
+                          itemBuilder: (ctx) => [
+                            const PopupMenuItem(
+                              value: 'settings',
+                              child: Text('Account Settings'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'signout',
+                              child: Text('Sign Out', style: TextStyle(color: Colors.redAccent)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )
+                : InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      showGoogleSignInDialog(
+                        context: context,
+                        authService: authService,
+                        accentColor: accentColor,
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: accentColor.withAlpha(25),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: accentColor.withAlpha(60)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.account_circle_outlined, color: accentColor, size: 22),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Sign in with Google',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: accentColor,
+                                  ),
+                                ),
+                                Text(
+                                  'Sync YouTube playlists',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right_rounded, color: accentColor, size: 18),
+                        ],
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCreatePlaylistDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New Playlist'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Playlist name',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isNotEmpty) {
+                await playlistService.createPlaylist(title: name);
+                if (ctx.mounted) Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SidebarItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final Color accentColor;
+  final VoidCallback onTap;
+
+  const _SidebarItem({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.accentColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final text = theme.colorScheme.onSurface;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      child: Material(
+        color: isSelected ? accentColor.withAlpha(35) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 22,
+                  color: isSelected ? accentColor : text.withAlpha(190),
+                ),
+                const SizedBox(width: 14),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    color: isSelected ? accentColor : text.withAlpha(220),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1911,23 +2372,20 @@ class _SearchTabState extends State<SearchTab> {
           ],
         ),
         const SizedBox(height: 4),
-        ..._searchHistory.map((item) => Material(
-              color: Colors.transparent,
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.history_rounded, size: 20),
-                title: Text(
-                  item,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                  onPressed: () => _removeFromHistory(item),
-                  tooltip: 'Remove',
-                ),
-                onTap: () => _selectSearchTerm(item),
+        ..._searchHistory.map((item) => ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.history_rounded, size: 20),
+              title: Text(
+                item,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
               ),
+              trailing: IconButton(
+                icon: const Icon(Icons.close_rounded, size: 18),
+                onPressed: () => _removeFromHistory(item),
+                tooltip: 'Remove',
+              ),
+              onTap: () => _selectSearchTerm(item),
             )),
       ],
     );
@@ -1939,28 +2397,25 @@ class _SearchTabState extends State<SearchTab> {
       itemCount: _suggestions.length,
       itemBuilder: (context, index) {
         final suggestion = _suggestions[index];
-        return Material(
-          color: Colors.transparent,
-          child: ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.search_rounded, size: 20),
-            title: Text(
-              suggestion,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-            ),
-            trailing: IconButton(
-              icon: const Icon(Icons.north_west_rounded, size: 18),
-              onPressed: () {
-                _searchController.text = suggestion;
-                _searchController.selection = TextSelection.fromPosition(
-                  TextPosition(offset: suggestion.length),
-                );
-              },
-              tooltip: 'Insert into search',
-            ),
-            onTap: () => _selectSearchTerm(suggestion),
+        return ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.search_rounded, size: 20),
+          title: Text(
+            suggestion,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
           ),
+          trailing: IconButton(
+            icon: const Icon(Icons.north_west_rounded, size: 18),
+            onPressed: () {
+              _searchController.text = suggestion;
+              _searchController.selection = TextSelection.fromPosition(
+                TextPosition(offset: suggestion.length),
+              );
+            },
+            tooltip: 'Insert into search',
+          ),
+          onTap: () => _selectSearchTerm(suggestion),
         );
       },
     );

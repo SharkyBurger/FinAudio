@@ -246,8 +246,6 @@ class DesktopPlayerBar extends StatefulWidget {
   final GoogleAuthService? authService;
   final PlaylistService? playlistService;
   final SettingsService? settingsService;
-  final bool isRightPanelOpen;
-  final VoidCallback? onToggleRightPanel;
 
   const DesktopPlayerBar({
     super.key,
@@ -257,8 +255,6 @@ class DesktopPlayerBar extends StatefulWidget {
     this.authService,
     this.playlistService,
     this.settingsService,
-    this.isRightPanelOpen = false,
-    this.onToggleRightPanel,
   });
 
   @override
@@ -743,18 +739,6 @@ class _DesktopPlayerBarState extends State<DesktopPlayerBar> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                if (widget.onToggleRightPanel != null)
-                  IconButton(
-                    tooltip: 'Now playing view',
-                    icon: Icon(
-                      Icons.slideshow_rounded,
-                      color: widget.isRightPanelOpen
-                          ? widget.accentColor
-                          : theme.colorScheme.onSurface.withAlpha(180),
-                      size: 20,
-                    ),
-                    onPressed: widget.onToggleRightPanel,
-                  ),
                 IconButton(
                   tooltip: 'Queue',
                   icon: Icon(
@@ -933,10 +917,4 @@ Widget _buildThumbnailPlaceholder(Color accentColor, {double size = 44}) {
     ),
   );
 }
-
-Widget buildTrackThumbnail(Track track, Color accentColor, {double size = 44}) =>
-    _buildBarThumbnail(track, accentColor, size: size);
-
-Widget buildThumbnailPlaceholder(Color accentColor, {double size = 44}) =>
-    _buildThumbnailPlaceholder(accentColor, size: size);
 

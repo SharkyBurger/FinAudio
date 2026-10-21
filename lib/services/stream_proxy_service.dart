@@ -46,7 +46,6 @@ class StreamProxyService {
     _startCompleter = Completer<void>();
     try {
       _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      _server!.idleTimeout = Duration.zero;
       debugPrint('StreamProxyService: listening on http://127.0.0.1:$port');
       _server!.listen(_handleRequest, onError: (err) {
         debugPrint('StreamProxyService server error: $err');
