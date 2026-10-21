@@ -1672,37 +1672,50 @@ class _HomeTabState extends State<HomeTab> {
     return items;
   }
 
+  VoidCallback _seedTrackTap(String title, String artist, String videoId, String coverUrl) {
+    return () {
+      final track = LocalPlaylistTrack(
+        title: title,
+        artist: artist,
+        youtubeVideoId: videoId,
+        thumbnailUrl: coverUrl,
+        duration: const Duration(minutes: 3, seconds: 30),
+      );
+      _playTrackList([track], 0);
+    };
+  }
+
   List<({String title, String artist, String coverUrl, VoidCallback? onTap})> _getSpeedDialFallbackPool(int seed) {
     if (seed % 3 == 1) {
       return [
-        (title: 'Today\'s Top Hits', artist: 'Popular Mix', coverUrl: 'https://img.youtube.com/vi/eVli-tstM5E/hqdefault.jpg', onTap: null),
-        (title: 'Training Season', artist: 'Dua Lipa', coverUrl: 'https://img.youtube.com/vi/n0GXk_T2zs8/hqdefault.jpg', onTap: null),
-        (title: 'Starboy', artist: 'The Weeknd', coverUrl: 'https://img.youtube.com/vi/34Na4j8AVgA/hqdefault.jpg', onTap: null),
-        (title: 'Cruel Summer', artist: 'Taylor Swift', coverUrl: 'https://img.youtube.com/vi/ic8j13piAhQ/hqdefault.jpg', onTap: null),
-        (title: 'Espresso', artist: 'Sabrina Carpenter', coverUrl: 'https://img.youtube.com/vi/eVli-tstM5E/hqdefault.jpg', onTap: null),
-        (title: 'Birds of a Feather', artist: 'Billie Eilish', coverUrl: 'https://img.youtube.com/vi/d5gf9dXbPi0/hqdefault.jpg', onTap: null),
-        (title: 'Houdini', artist: 'Dua Lipa', coverUrl: 'https://img.youtube.com/vi/suAR1PYFNYA/hqdefault.jpg', onTap: null),
+        (title: 'Today\'s Top Hits', artist: 'Popular Mix', coverUrl: 'https://img.youtube.com/vi/eVli-tstM5E/hqdefault.jpg', onTap: _seedTrackTap('Today\'s Top Hits', 'Popular Mix', 'eVli-tstM5E', 'https://img.youtube.com/vi/eVli-tstM5E/hqdefault.jpg')),
+        (title: 'Training Season', artist: 'Dua Lipa', coverUrl: 'https://img.youtube.com/vi/n0GXk_T2zs8/hqdefault.jpg', onTap: _seedTrackTap('Training Season', 'Dua Lipa', 'n0GXk_T2zs8', 'https://img.youtube.com/vi/n0GXk_T2zs8/hqdefault.jpg')),
+        (title: 'Starboy', artist: 'The Weeknd', coverUrl: 'https://img.youtube.com/vi/34Na4j8AVgA/hqdefault.jpg', onTap: _seedTrackTap('Starboy', 'The Weeknd', '34Na4j8AVgA', 'https://img.youtube.com/vi/34Na4j8AVgA/hqdefault.jpg')),
+        (title: 'Cruel Summer', artist: 'Taylor Swift', coverUrl: 'https://img.youtube.com/vi/ic8j13piAhQ/hqdefault.jpg', onTap: _seedTrackTap('Cruel Summer', 'Taylor Swift', 'ic8j13piAhQ', 'https://img.youtube.com/vi/ic8j13piAhQ/hqdefault.jpg')),
+        (title: 'Espresso', artist: 'Sabrina Carpenter', coverUrl: 'https://img.youtube.com/vi/eVli-tstM5E/hqdefault.jpg', onTap: _seedTrackTap('Espresso', 'Sabrina Carpenter', 'eVli-tstM5E', 'https://img.youtube.com/vi/eVli-tstM5E/hqdefault.jpg')),
+        (title: 'Birds of a Feather', artist: 'Billie Eilish', coverUrl: 'https://img.youtube.com/vi/d5gf9dXbPi0/hqdefault.jpg', onTap: _seedTrackTap('Birds of a Feather', 'Billie Eilish', 'd5gf9dXbPi0', 'https://img.youtube.com/vi/d5gf9dXbPi0/hqdefault.jpg')),
+        (title: 'Houdini', artist: 'Dua Lipa', coverUrl: 'https://img.youtube.com/vi/suAR1PYFNYA/hqdefault.jpg', onTap: _seedTrackTap('Houdini', 'Dua Lipa', 'suAR1PYFNYA', 'https://img.youtube.com/vi/suAR1PYFNYA/hqdefault.jpg')),
       ];
     } else if (seed % 3 == 2) {
       return [
-        (title: 'Deep Focus Mix', artist: 'Ambient Chill', coverUrl: 'https://img.youtube.com/vi/ApXoWvfEYVU/hqdefault.jpg', onTap: null),
-        (title: 'Blinding Lights', artist: 'The Weeknd', coverUrl: 'https://img.youtube.com/vi/4NRXx6U8ABQ/hqdefault.jpg', onTap: null),
-        (title: 'Levitating', artist: 'Dua Lipa', coverUrl: 'https://img.youtube.com/vi/TUVcZfQe-Kw/hqdefault.jpg', onTap: null),
-        (title: 'Too Sweet', artist: 'Hozier', coverUrl: 'https://img.youtube.com/vi/aezstcBhopQ/hqdefault.jpg', onTap: null),
-        (title: 'As It Was', artist: 'Harry Styles', coverUrl: 'https://img.youtube.com/vi/H5v3kku4y6Q/hqdefault.jpg', onTap: null),
-        (title: 'PARALLAX', artist: 'Album', coverUrl: 'https://img.youtube.com/vi/bpOSxM0tfN8/hqdefault.jpg', onTap: null),
-        (title: 'The Storm', artist: 'TheFatRat', coverUrl: 'https://img.youtube.com/vi/fJ9rUzIMcZQ/hqdefault.jpg', onTap: null),
+        (title: 'Deep Focus Mix', artist: 'Ambient Chill', coverUrl: 'https://img.youtube.com/vi/ApXoWvfEYVU/hqdefault.jpg', onTap: _seedTrackTap('Deep Focus Mix', 'Ambient Chill', 'ApXoWvfEYVU', 'https://img.youtube.com/vi/ApXoWvfEYVU/hqdefault.jpg')),
+        (title: 'Blinding Lights', artist: 'The Weeknd', coverUrl: 'https://img.youtube.com/vi/4NRXx6U8ABQ/hqdefault.jpg', onTap: _seedTrackTap('Blinding Lights', 'The Weeknd', '4NRXx6U8ABQ', 'https://img.youtube.com/vi/4NRXx6U8ABQ/hqdefault.jpg')),
+        (title: 'Levitating', artist: 'Dua Lipa', coverUrl: 'https://img.youtube.com/vi/TUVcZfQe-Kw/hqdefault.jpg', onTap: _seedTrackTap('Levitating', 'Dua Lipa', 'TUVcZfQe-Kw', 'https://img.youtube.com/vi/TUVcZfQe-Kw/hqdefault.jpg')),
+        (title: 'Too Sweet', artist: 'Hozier', coverUrl: 'https://img.youtube.com/vi/aezstcBhopQ/hqdefault.jpg', onTap: _seedTrackTap('Too Sweet', 'Hozier', 'aezstcBhopQ', 'https://img.youtube.com/vi/aezstcBhopQ/hqdefault.jpg')),
+        (title: 'As It Was', artist: 'Harry Styles', coverUrl: 'https://img.youtube.com/vi/H5v3kku4y6Q/hqdefault.jpg', onTap: _seedTrackTap('As It Was', 'Harry Styles', 'H5v3kku4y6Q', 'https://img.youtube.com/vi/H5v3kku4y6Q/hqdefault.jpg')),
+        (title: 'PARALLAX', artist: 'Album', coverUrl: 'https://img.youtube.com/vi/bpOSxM0tfN8/hqdefault.jpg', onTap: _seedTrackTap('PARALLAX', 'Album', 'bpOSxM0tfN8', 'https://img.youtube.com/vi/bpOSxM0tfN8/hqdefault.jpg')),
+        (title: 'The Storm', artist: 'TheFatRat', coverUrl: 'https://img.youtube.com/vi/fJ9rUzIMcZQ/hqdefault.jpg', onTap: _seedTrackTap('The Storm', 'TheFatRat', 'fJ9rUzIMcZQ', 'https://img.youtube.com/vi/fJ9rUzIMcZQ/hqdefault.jpg')),
       ];
     }
 
     return [
-      (title: 'Recap March-May', artist: 'Auto mix', coverUrl: 'https://img.youtube.com/vi/4NRXx6U8ABQ/hqdefault.jpg', onTap: null),
-      (title: 'Yoshida Yasei', artist: 'Artist', coverUrl: 'https://img.youtube.com/vi/XXYlFuWEuKi/hqdefault.jpg', onTap: null),
-      (title: 'テレパシ', artist: 'Song', coverUrl: 'https://img.youtube.com/vi/TUVcZfQe-Kw/hqdefault.jpg', onTap: null),
-      (title: 'Writing On The Wall', artist: 'kanalia', coverUrl: 'https://img.youtube.com/vi/h8VnYvE1e6w/hqdefault.jpg', onTap: null),
-      (title: 'ItaloBrothers', artist: 'Artist', coverUrl: 'https://img.youtube.com/vi/34Na4j8AVgA/hqdefault.jpg', onTap: null),
-      (title: 'PARALLAX', artist: 'Album', coverUrl: 'https://img.youtube.com/vi/bpOSxM0tfN8/hqdefault.jpg', onTap: null),
-      (title: 'The Storm', artist: 'TheFatRat', coverUrl: 'https://img.youtube.com/vi/fJ9rUzIMcZQ/hqdefault.jpg', onTap: null),
+      (title: 'Recap March-May', artist: 'Auto mix', coverUrl: 'https://img.youtube.com/vi/4NRXx6U8ABQ/hqdefault.jpg', onTap: _seedTrackTap('Recap March-May', 'Auto mix', '4NRXx6U8ABQ', 'https://img.youtube.com/vi/4NRXx6U8ABQ/hqdefault.jpg')),
+      (title: 'Yoshida Yasei', artist: 'Artist', coverUrl: 'https://img.youtube.com/vi/XXYlFuWEuKi/hqdefault.jpg', onTap: _seedTrackTap('Yoshida Yasei', 'Artist', 'XXYlFuWEuKi', 'https://img.youtube.com/vi/XXYlFuWEuKi/hqdefault.jpg')),
+      (title: 'テレパシ', artist: 'Song', coverUrl: 'https://img.youtube.com/vi/TUVcZfQe-Kw/hqdefault.jpg', onTap: _seedTrackTap('テレパシ', 'Song', 'TUVcZfQe-Kw', 'https://img.youtube.com/vi/TUVcZfQe-Kw/hqdefault.jpg')),
+      (title: 'Writing On The Wall', artist: 'kanalia', coverUrl: 'https://img.youtube.com/vi/h8VnYvE1e6w/hqdefault.jpg', onTap: _seedTrackTap('Writing On The Wall', 'kanalia', 'h8VnYvE1e6w', 'https://img.youtube.com/vi/h8VnYvE1e6w/hqdefault.jpg')),
+      (title: 'ItaloBrothers', artist: 'Artist', coverUrl: 'https://img.youtube.com/vi/34Na4j8AVgA/hqdefault.jpg', onTap: _seedTrackTap('ItaloBrothers', 'Artist', '34Na4j8AVgA', 'https://img.youtube.com/vi/34Na4j8AVgA/hqdefault.jpg')),
+      (title: 'PARALLAX', artist: 'Album', coverUrl: 'https://img.youtube.com/vi/bpOSxM0tfN8/hqdefault.jpg', onTap: _seedTrackTap('PARALLAX', 'Album', 'bpOSxM0tfN8', 'https://img.youtube.com/vi/bpOSxM0tfN8/hqdefault.jpg')),
+      (title: 'The Storm', artist: 'TheFatRat', coverUrl: 'https://img.youtube.com/vi/fJ9rUzIMcZQ/hqdefault.jpg', onTap: _seedTrackTap('The Storm', 'TheFatRat', 'fJ9rUzIMcZQ', 'https://img.youtube.com/vi/fJ9rUzIMcZQ/hqdefault.jpg')),
     ];
   }
 

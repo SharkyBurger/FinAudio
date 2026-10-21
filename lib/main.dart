@@ -358,6 +358,7 @@ class _MainScaffold extends StatefulWidget {
 }
 
 class _MainScaffoldState extends State<_MainScaffold> {
+  final GlobalKey<DesktopSpotifyShellState> _desktopShellKey = GlobalKey<DesktopSpotifyShellState>();
   int _currentIndex = 0;
   Track? _nowPlaying;
   StreamSubscription<Track?>? _trackSub;
@@ -388,28 +389,50 @@ class _MainScaffoldState extends State<_MainScaffold> {
     if (mounted) setState(() {});
   }
 
-  List<Widget> _buildContentTabs(Color accentColor) {
+  List<Widget> _buildContentTabs(Color accentColor, {bool isDesktop = false}) {
     return [
       HomeTab(
         playerService: widget.playerService,
         authService: widget.authService,
         playlistService: widget.playlistService,
         settingsService: widget.settingsService,
-        onOpenPlaylists: () => setState(() => _currentIndex = 2),
-        onOpenSearch: () => setState(() => _currentIndex = 1),
-        onOpenSettings: () => setState(() => _currentIndex = 3),
+        onOpenPlaylists: () {
+          if (isDesktop) {
+            _desktopShellKey.currentState?.navigateTo(tabIndex: 2);
+          } else {
+            setState(() => _currentIndex = 2);
+          }
+        },
+        onOpenSearch: () {
+          if (isDesktop) {
+            _desktopShellKey.currentState?.navigateTo(tabIndex: 1);
+          } else {
+            setState(() => _currentIndex = 1);
+          }
+        },
+        onOpenSettings: () {
+          if (isDesktop) {
+            _desktopShellKey.currentState?.navigateTo(tabIndex: 3);
+          } else {
+            setState(() => _currentIndex = 3);
+          }
+        },
         onOpenPlaylistDetail: (playlist) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => LocalPlaylistDetailScreen(
-                playlist: playlist,
-                playerService: widget.playerService,
-                playlistService: widget.playlistService,
-                settingsService: widget.settingsService,
-                authService: widget.authService,
+          if (isDesktop) {
+            _desktopShellKey.currentState?.navigateTo(playlist: playlist);
+          } else {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => LocalPlaylistDetailScreen(
+                  playlist: playlist,
+                  playerService: widget.playerService,
+                  playlistService: widget.playlistService,
+                  settingsService: widget.settingsService,
+                  authService: widget.authService,
+                ),
               ),
-            ),
-          );
+            );
+          }
         },
       ),
       SearchTab(
@@ -424,20 +447,36 @@ class _MainScaffoldState extends State<_MainScaffold> {
         authService: widget.authService,
         playlistService: widget.playlistService,
         settingsService: widget.settingsService,
-        onGoToSettings: () => setState(() => _currentIndex = 3),
-        onGoToPlayer: () => setState(() => _currentIndex = 0),
+        onGoToSettings: () {
+          if (isDesktop) {
+            _desktopShellKey.currentState?.navigateTo(tabIndex: 3);
+          } else {
+            setState(() => _currentIndex = 3);
+          }
+        },
+        onGoToPlayer: () {
+          if (isDesktop) {
+            _desktopShellKey.currentState?.navigateTo(tabIndex: 0);
+          } else {
+            setState(() => _currentIndex = 0);
+          }
+        },
         onOpenPlaylistDetail: (playlist) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => LocalPlaylistDetailScreen(
-                playlist: playlist,
-                playlistService: widget.playlistService,
-                playerService: widget.playerService,
-                settingsService: widget.settingsService,
-                authService: widget.authService,
+          if (isDesktop) {
+            _desktopShellKey.currentState?.navigateTo(playlist: playlist);
+          } else {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => LocalPlaylistDetailScreen(
+                  playlist: playlist,
+                  playlistService: widget.playlistService,
+                  playerService: widget.playerService,
+                  settingsService: widget.settingsService,
+                  authService: widget.authService,
+                ),
               ),
-            ),
-          );
+            );
+          }
         },
         onOpenYtPlaylistDetail: (playlist) {
           Navigator.of(context).push(
@@ -466,10 +505,11 @@ class _MainScaffoldState extends State<_MainScaffold> {
   Widget build(BuildContext context) {
     final accentColor = widget.settingsService.accentColor;
     final isDesktop = MediaQuery.of(context).size.width >= 800;
-    final contentTabs = _buildContentTabs(accentColor);
+    final contentTabs = _buildContentTabs(accentColor, isDesktop: isDesktop);
 
     if (isDesktop) {
       return DesktopSpotifyShell(
+        key: _desktopShellKey,
         accentColor: accentColor,
         playerService: widget.playerService,
         authService: widget.authService,

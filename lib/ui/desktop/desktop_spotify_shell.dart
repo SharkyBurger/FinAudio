@@ -19,7 +19,8 @@ class _DesktopNavHistory {
 
 /// Spotify-style Desktop Shell with floating rounded Island cards,
 /// collapsible/interactive sidebar, central stage with back/forward history,
-/// and optional right-hand Now Playing view.
+/// and optional right-hand Now Playing view. Styled seamlessly with the user's
+/// applied FinAudio theme.
 class DesktopSpotifyShell extends StatefulWidget {
   final Color accentColor;
   final PlayerService playerService;
@@ -41,10 +42,10 @@ class DesktopSpotifyShell extends StatefulWidget {
   });
 
   @override
-  State<DesktopSpotifyShell> createState() => _DesktopSpotifyShellState();
+  State<DesktopSpotifyShell> createState() => DesktopSpotifyShellState();
 }
 
-class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
+class DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
   int _currentIndex = 0;
   LocalPlaylist? _activePlaylist;
   bool _showRightPanel = false;
@@ -65,6 +66,7 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
     });
     widget.playlistService.addListener(_onServiceUpdate);
     widget.authService.addListener(_onServiceUpdate);
+    widget.settingsService.addListener(_onServiceUpdate);
   }
 
   @override
@@ -72,11 +74,16 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
     _trackSub?.cancel();
     widget.playlistService.removeListener(_onServiceUpdate);
     widget.authService.removeListener(_onServiceUpdate);
+    widget.settingsService.removeListener(_onServiceUpdate);
     super.dispose();
   }
 
   void _onServiceUpdate() {
     if (mounted) setState(() {});
+  }
+
+  void navigateTo({int? tabIndex, LocalPlaylist? playlist}) {
+    _navigateTo(tabIndex: tabIndex, playlist: playlist);
   }
 
   void _navigateTo({int? tabIndex, LocalPlaylist? playlist}) {
@@ -116,14 +123,20 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
   }
 
   void _showQueueDialog(BuildContext context) {
-    final theme = Theme.of(context);
+    final surface = widget.settingsService.surfaceColor;
+    final text = widget.settingsService.textColor;
+    final textMuted = text.withAlpha(170);
+    final textDim = text.withAlpha(110);
+    final border = text.withAlpha(20);
+    final accent = widget.settingsService.accentColor;
+
     final queue = widget.playerService.queue;
     final current = widget.playerService.currentTrack;
 
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: const Color(0xFF1E1E1E),
+        backgroundColor: surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 480, maxHeight: 560),
@@ -134,26 +147,29 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.queue_music_rounded, color: widget.accentColor),
+                    Icon(Icons.queue_music_rounded, color: accent),
                     const SizedBox(width: 10),
                     Text(
                       'Playback Queue',
-                      style: theme.textTheme.titleMedium?.copyWith(
+                      style: TextStyle(
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: text,
                       ),
                     ),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                      icon: Icon(Icons.close_rounded, color: textMuted),
                       onPressed: () => Navigator.pop(ctx),
                     ),
                   ],
                 ),
-                const Divider(color: Colors.white24),
+                Divider(color: border),
                 if (queue.isEmpty && current == null)
-                  const Expanded(
-                    child: Center(child: Text('Queue is empty', style: TextStyle(color: Colors.white54))),
+                  Expanded(
+                    child: Center(
+                      child: Text('Queue is empty', style: TextStyle(color: textDim)),
+                    ),
                   )
                 else
                   Expanded(
@@ -164,13 +180,13 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                         final isCurrent = item.id == current?.id;
                         return ListTile(
                           selected: isCurrent,
-                          selectedTileColor: widget.accentColor.withAlpha(30),
+                          selectedTileColor: accent.withAlpha(30),
                           leading: ClipRRect(
                             borderRadius: BorderRadius.circular(6),
                             child: SizedBox(
                               width: 40,
                               height: 40,
-                              child: buildTrackThumbnail(item, widget.accentColor, size: 40),
+                              child: buildTrackThumbnail(item, accent, size: 40),
                             ),
                           ),
                           title: Text(
@@ -179,17 +195,17 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                              color: isCurrent ? widget.accentColor : Colors.white,
+                              color: isCurrent ? accent : text,
                             ),
                           ),
                           subtitle: Text(
                             item.author,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white54),
+                            style: TextStyle(color: textDim),
                           ),
                           trailing: isCurrent
-                              ? Icon(Icons.volume_up_rounded, color: widget.accentColor, size: 18)
+                              ? Icon(Icons.volume_up_rounded, color: accent, size: 18)
                               : null,
                           onTap: () {
                             widget.playerService.playTrackAt(i);
@@ -208,31 +224,38 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
   }
 
   void _showCreatePlaylistDialog(BuildContext context) {
+    final surface = widget.settingsService.surfaceColor;
+    final text = widget.settingsService.textColor;
+    final textMuted = text.withAlpha(170);
+    final textDim = text.withAlpha(110);
+    final accent = widget.settingsService.accentColor;
+    final onAccent = accent.computeLuminance() > 0.5 ? const Color(0xFF101010) : const Color(0xFFFFFFFF);
+
     final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF282828),
+        backgroundColor: surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('Create New Playlist', style: TextStyle(color: Colors.white)),
+        title: Text('Create New Playlist', style: TextStyle(color: text, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: controller,
           autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
+          style: TextStyle(color: text),
+          decoration: InputDecoration(
             hintText: 'My Playlist #1',
-            hintStyle: TextStyle(color: Color(0xFF7A7A7A)),
+            hintStyle: TextStyle(color: textDim),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFFB3B3B3))),
+            child: Text('Cancel', style: TextStyle(color: textMuted)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: widget.accentColor,
-              foregroundColor: Colors.black,
+              backgroundColor: accent,
+              foregroundColor: onAccent,
             ),
             onPressed: () async {
               final title = controller.text.trim();
@@ -256,10 +279,14 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
     required IconData activeIcon,
     required String label,
     required bool isSelected,
+    required Color accent,
+    required Color text,
+    required Color textMuted,
     required VoidCallback onTap,
   }) {
     return Material(
-      color: Colors.transparent,
+      color: isSelected ? accent.withAlpha(22) : Colors.transparent,
+      borderRadius: BorderRadius.circular(6),
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
         onTap: onTap,
@@ -269,7 +296,7 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
             children: [
               Icon(
                 isSelected ? activeIcon : icon,
-                color: isSelected ? Colors.white : const Color(0xFFB3B3B3),
+                color: isSelected ? accent : textMuted,
                 size: 24,
               ),
               const SizedBox(width: 16),
@@ -277,8 +304,8 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                 label,
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: isSelected ? Colors.white : const Color(0xFFB3B3B3),
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                  color: isSelected ? text : textMuted,
                   letterSpacing: -0.2,
                 ),
               ),
@@ -289,11 +316,12 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
     );
   }
 
-  Widget _buildTopNavCard() {
+  Widget _buildTopNavCard(Color surface, Color cardBorder, Color accent, Color text, Color textMuted) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF121212),
+        color: surface,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: cardBorder, width: 1),
       ),
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
@@ -307,21 +335,21 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: widget.accentColor.withAlpha(40),
+                    color: accent.withAlpha(35),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: widget.accentColor.withAlpha(90)),
+                    border: Border.all(color: accent.withAlpha(90)),
                   ),
                   child: Center(
-                    child: Icon(Icons.graphic_eq_rounded, color: widget.accentColor, size: 20),
+                    child: Icon(Icons.graphic_eq_rounded, color: accent, size: 20),
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Text(
+                Text(
                   'FinAudio',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
-                    color: Colors.white,
+                    color: text,
                     letterSpacing: -0.5,
                   ),
                 ),
@@ -333,6 +361,9 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
             activeIcon: Icons.home_rounded,
             label: 'Home',
             isSelected: _currentIndex == 0 && _activePlaylist == null,
+            accent: accent,
+            text: text,
+            textMuted: textMuted,
             onTap: () => _navigateTo(tabIndex: 0),
           ),
           _buildSidebarItem(
@@ -340,6 +371,9 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
             activeIcon: Icons.search_rounded,
             label: 'Search',
             isSelected: _currentIndex == 1 && _activePlaylist == null,
+            accent: accent,
+            text: text,
+            textMuted: textMuted,
             onTap: () => _navigateTo(tabIndex: 1),
           ),
         ],
@@ -347,7 +381,17 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
     );
   }
 
-  Widget _buildLibraryCard() {
+  Widget _buildLibraryCard(
+    Color surface,
+    Color cardBorder,
+    Color bg,
+    Color accent,
+    Color text,
+    Color textMuted,
+    Color textDim,
+    Color inputBg,
+    Color onAccent,
+  ) {
     final likedSongs = widget.playlistService.likedSongsPlaylist;
     var playlists = widget.playlistService.playlists
         .where((p) => p.id != PlaylistService.likedSongsId)
@@ -361,8 +405,9 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF121212),
+        color: surface,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: cardBorder, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -372,21 +417,21 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
             padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
             child: Row(
               children: [
-                const Icon(Icons.library_music_rounded, color: Color(0xFFB3B3B3), size: 22),
+                Icon(Icons.library_music_rounded, color: textMuted, size: 22),
                 const SizedBox(width: 12),
-                const Text(
+                Text(
                   'Your Library',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFFB3B3B3),
+                    color: textMuted,
                     letterSpacing: -0.2,
                   ),
                 ),
                 const Spacer(),
                 IconButton(
                   tooltip: 'Create playlist',
-                  icon: const Icon(Icons.add_rounded, size: 20, color: Color(0xFFB3B3B3)),
+                  icon: Icon(Icons.add_rounded, size: 20, color: textMuted),
                   splashRadius: 18,
                   onPressed: () => _showCreatePlaylistDialog(context),
                 ),
@@ -400,21 +445,21 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
             child: Container(
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFF242424),
+                color: inputBg,
                 borderRadius: BorderRadius.circular(6),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Row(
                 children: [
-                  const Icon(Icons.search_rounded, size: 16, color: Color(0xFFB3B3B3)),
+                  Icon(Icons.search_rounded, size: 16, color: textDim),
                   const SizedBox(width: 6),
                   Expanded(
                     child: TextField(
                       onChanged: (val) => setState(() => _libraryFilter = val),
-                      style: const TextStyle(fontSize: 12, color: Colors.white),
-                      decoration: const InputDecoration(
+                      style: TextStyle(fontSize: 12, color: text),
+                      decoration: InputDecoration(
                         hintText: 'Search in Your Library',
-                        hintStyle: TextStyle(fontSize: 11, color: Color(0xFF7A7A7A)),
+                        hintStyle: TextStyle(fontSize: 11, color: textDim),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
@@ -424,7 +469,7 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                   if (_libraryFilter.isNotEmpty)
                     GestureDetector(
                       onTap: () => setState(() => _libraryFilter = ''),
-                      child: const Icon(Icons.close_rounded, size: 14, color: Color(0xFFB3B3B3)),
+                      child: Icon(Icons.close_rounded, size: 14, color: textDim),
                     ),
                 ],
               ),
@@ -441,7 +486,7 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                 // Liked Songs Item (Featured top)
                 Material(
                   color: (_activePlaylist?.id == PlaylistService.likedSongsId)
-                      ? Colors.white.withAlpha(25)
+                      ? accent.withAlpha(25)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(6),
                   child: InkWell(
@@ -456,14 +501,17 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                             height: 44,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(4),
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF450AF5), Color(0xFF8E8EE5)],
+                              gradient: LinearGradient(
+                                colors: [
+                                  accent.withAlpha(220),
+                                  Color.lerp(accent, surface, 0.55) ?? accent,
+                                ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
                             ),
-                            child: const Center(
-                              child: Icon(Icons.favorite_rounded, color: Colors.white, size: 20),
+                            child: Center(
+                              child: Icon(Icons.favorite_rounded, color: onAccent, size: 20),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -471,12 +519,12 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
+                                Text(
                                   'Liked Songs',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                                    color: text,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -484,16 +532,16 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                                 const SizedBox(height: 2),
                                 Row(
                                   children: [
-                                    const Icon(Icons.push_pin_rounded, size: 11, color: Color(0xFF1DB954)),
+                                    Icon(Icons.push_pin_rounded, size: 11, color: accent),
                                     const SizedBox(width: 4),
                                     Expanded(
                                       child: Text(
                                         'Playlist • ${likedSongs.tracks.length} songs',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 11,
-                                          color: Color(0xFFB3B3B3),
+                                          color: textDim,
                                         ),
                                       ),
                                     ),
@@ -513,7 +561,7 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                   const SizedBox(height: 2),
                   Material(
                     color: (_activePlaylist?.id == p.id)
-                        ? Colors.white.withAlpha(25)
+                        ? accent.withAlpha(25)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(6),
                     child: InkWell(
@@ -528,19 +576,19 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                               child: Container(
                                 width: 44,
                                 height: 44,
-                                color: const Color(0xFF282828),
+                                color: inputBg,
                                 child: (p.thumbnailUrl.isNotEmpty)
                                     ? CachedNetworkImage(
                                         imageUrl: p.thumbnailUrl,
                                         fit: BoxFit.cover,
-                                        errorWidget: (_, _, _) => const Icon(
+                                        errorWidget: (_, _, _) => Icon(
                                           Icons.music_note_rounded,
-                                          color: Colors.white38,
+                                          color: textDim,
                                         ),
                                       )
-                                    : const Icon(
+                                    : Icon(
                                         Icons.queue_music_rounded,
-                                        color: Colors.white38,
+                                        color: textDim,
                                       ),
                               ),
                             ),
@@ -551,10 +599,10 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                                 children: [
                                   Text(
                                     p.title,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.white,
+                                      color: text,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -562,9 +610,9 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                                   const SizedBox(height: 2),
                                   Text(
                                     'Playlist • ${p.tracks.length} songs',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 11,
-                                      color: Color(0xFFB3B3B3),
+                                      color: textDim,
                                     ),
                                   ),
                                 ],
@@ -584,19 +632,29 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
     );
   }
 
-  Widget _buildCenterTopBar() {
+  Widget _buildCenterTopBar(
+    Color surface,
+    Color bg,
+    Color border,
+    Color accent,
+    Color text,
+    Color textMuted,
+    Color textDim,
+    Color onAccent,
+  ) {
     final canGoBack = _historyIndex > 0;
     final canGoForward = _historyIndex < _history.length - 1;
     final isSignedIn = widget.authService.isSignedIn;
     final user = widget.authService.currentUser;
+    final headerBg = Color.lerp(surface, bg, 0.25) ?? surface;
 
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        color: Color(0xFF101010),
+      decoration: BoxDecoration(
+        color: headerBg,
         border: Border(
-          bottom: BorderSide(color: Color(0xFF1F1F1F), width: 1),
+          bottom: BorderSide(color: border, width: 1),
         ),
       ),
       child: Row(
@@ -607,14 +665,14 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
             height: 32,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: canGoBack ? Colors.black : Colors.black38,
+              color: canGoBack ? bg.withAlpha(220) : bg.withAlpha(100),
             ),
             child: IconButton(
               padding: EdgeInsets.zero,
               icon: Icon(
                 Icons.chevron_left_rounded,
                 size: 24,
-                color: canGoBack ? Colors.white : Colors.white24,
+                color: canGoBack ? text : textDim,
               ),
               onPressed: canGoBack ? _goBack : null,
             ),
@@ -625,14 +683,14 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
             height: 32,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: canGoForward ? Colors.black : Colors.black38,
+              color: canGoForward ? bg.withAlpha(220) : bg.withAlpha(100),
             ),
             child: IconButton(
               padding: EdgeInsets.zero,
               icon: Icon(
                 Icons.chevron_right_rounded,
                 size: 24,
-                color: canGoForward ? Colors.white : Colors.white24,
+                color: canGoForward ? text : textDim,
               ),
               onPressed: canGoForward ? _goForward : null,
             ),
@@ -648,8 +706,8 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                   ? Icons.settings_rounded
                   : Icons.settings_outlined,
               color: _currentIndex == 3 && _activePlaylist == null
-                  ? widget.accentColor
-                  : const Color(0xFFB3B3B3),
+                  ? accent
+                  : textMuted,
               size: 20,
             ),
             onPressed: () => _navigateTo(tabIndex: 3),
@@ -661,9 +719,9 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.black,
+                color: bg.withAlpha(220),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white12),
+                border: Border.all(color: border),
               ),
               child: Row(
                 children: [
@@ -672,24 +730,24 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                     backgroundImage: (user.photoUrl != null && user.photoUrl!.isNotEmpty)
                         ? NetworkImage(user.photoUrl!)
                         : null,
-                    backgroundColor: widget.accentColor.withAlpha(40),
+                    backgroundColor: accent.withAlpha(40),
                     child: (user.photoUrl == null || user.photoUrl!.isEmpty)
-                        ? Icon(Icons.person, color: widget.accentColor, size: 14)
+                        ? Icon(Icons.person, color: accent, size: 14)
                         : null,
                   ),
                   const SizedBox(width: 8),
                   Text(
                     user.displayName ?? 'Account',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: text,
                     ),
                   ),
                   PopupMenuButton<String>(
-                    icon: const Icon(Icons.arrow_drop_down_rounded, color: Colors.white70, size: 20),
+                    icon: Icon(Icons.arrow_drop_down_rounded, color: textMuted, size: 20),
                     padding: EdgeInsets.zero,
-                    color: const Color(0xFF282828),
+                    color: surface,
                     onSelected: (val) async {
                       if (val == 'settings') {
                         _navigateTo(tabIndex: 3);
@@ -698,9 +756,9 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                       }
                     },
                     itemBuilder: (ctx) => [
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'settings',
-                        child: Text('Settings', style: TextStyle(color: Colors.white)),
+                        child: Text('Settings', style: TextStyle(color: text)),
                       ),
                       const PopupMenuItem(
                         value: 'signout',
@@ -714,8 +772,8 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
           else
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
+                backgroundColor: accent,
+                foregroundColor: onAccent,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -724,7 +782,7 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                 showGoogleSignInDialog(
                   context: context,
                   authService: widget.authService,
-                  accentColor: widget.accentColor,
+                  accentColor: accent,
                 );
               },
               child: const Text('Log in'),
@@ -736,8 +794,19 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
 
   @override
   Widget build(BuildContext context) {
+    final bg = widget.settingsService.backgroundColor;
+    final surface = widget.settingsService.surfaceColor;
+    final accent = widget.settingsService.accentColor;
+    final text = widget.settingsService.textColor;
+    final textMuted = text.withAlpha(170);
+    final textDim = text.withAlpha(110);
+    final border = text.withAlpha(20);
+    final cardBorder = text.withAlpha(18);
+    final inputBg = Color.lerp(surface, bg, 0.45) ?? surface;
+    final onAccent = accent.computeLuminance() > 0.5 ? const Color(0xFF101010) : const Color(0xFFFFFFFF);
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: bg,
       body: Padding(
         padding: const EdgeInsets.all(8.0),
         child: Column(
@@ -752,9 +821,21 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                     width: 280,
                     child: Column(
                       children: [
-                        _buildTopNavCard(),
+                        _buildTopNavCard(surface, cardBorder, accent, text, textMuted),
                         const SizedBox(height: 8),
-                        Expanded(child: _buildLibraryCard()),
+                        Expanded(
+                          child: _buildLibraryCard(
+                            surface,
+                            cardBorder,
+                            bg,
+                            accent,
+                            text,
+                            textMuted,
+                            textDim,
+                            inputBg,
+                            onAccent,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -765,12 +846,22 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                     child: Container(
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF121212),
+                        color: surface,
                         borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: cardBorder, width: 1),
                       ),
                       child: Column(
                         children: [
-                          _buildCenterTopBar(),
+                          _buildCenterTopBar(
+                            surface,
+                            bg,
+                            border,
+                            accent,
+                            text,
+                            textMuted,
+                            textDim,
+                            onAccent,
+                          ),
                           Expanded(
                             child: _activePlaylist != null
                                 ? DesktopPlaylistView(
@@ -780,7 +871,7 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                                     playlistService: widget.playlistService,
                                     settingsService: widget.settingsService,
                                     authService: widget.authService,
-                                    accentColor: widget.accentColor,
+                                    accentColor: accent,
                                     onBack: _goBack,
                                   )
                                 : IndexedStack(
@@ -801,14 +892,16 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
                       child: Container(
                         clipBehavior: Clip.antiAlias,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF121212),
+                          color: surface,
                           borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: cardBorder, width: 1),
                         ),
                         child: DesktopRightPanel(
                           track: _nowPlaying,
                           playerService: widget.playerService,
                           playlistService: widget.playlistService,
-                          accentColor: widget.accentColor,
+                          settingsService: widget.settingsService,
+                          accentColor: accent,
                           onClose: () => setState(() => _showRightPanel = false),
                           onOpenQueue: () => _showQueueDialog(context),
                         ),
@@ -824,7 +917,7 @@ class _DesktopSpotifyShellState extends State<DesktopSpotifyShell> {
             // 4. Bottom Player Bar
             DesktopPlayerBar(
               track: _nowPlaying,
-              accentColor: widget.accentColor,
+              accentColor: accent,
               playerService: widget.playerService,
               authService: widget.authService,
               playlistService: widget.playlistService,

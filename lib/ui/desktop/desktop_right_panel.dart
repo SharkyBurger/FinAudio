@@ -3,14 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:finaudio/services/player_service.dart';
 import 'package:finaudio/services/playlist_service.dart';
+import 'package:finaudio/services/settings_service.dart';
 import 'package:finaudio/widgets/now_playing_bar.dart';
 
 /// Spotify-style expandable Right-Hand Panel showing "Now Playing View"
-/// (artwork, track info, audio format badge, and upcoming queue preview).
+/// (artwork, track info, audio format badge, and upcoming queue preview),
+/// styled seamlessly with the user's applied FinAudio theme.
 class DesktopRightPanel extends StatelessWidget {
   final Track? track;
   final PlayerService playerService;
   final PlaylistService? playlistService;
+  final SettingsService? settingsService;
   final Color accentColor;
   final VoidCallback onClose;
   final VoidCallback? onOpenQueue;
@@ -20,14 +23,15 @@ class DesktopRightPanel extends StatelessWidget {
     required this.track,
     required this.playerService,
     this.playlistService,
+    this.settingsService,
     required this.accentColor,
     required this.onClose,
     this.onOpenQueue,
   });
 
-  Widget _buildBigArtwork(BuildContext context, Track? t) {
+  Widget _buildBigArtwork(BuildContext context, Track? t, Color placeholderBg, Color placeholderIcon) {
     if (t == null) {
-      return _buildPlaceholder();
+      return _buildPlaceholder(placeholderBg, placeholderIcon);
     }
 
     final localFile = t.resolvedLocalThumbnailFile;
@@ -39,7 +43,7 @@ class DesktopRightPanel extends StatelessWidget {
           height: 240,
           width: double.infinity,
           fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => _buildPlaceholder(),
+          errorBuilder: (_, _, _) => _buildPlaceholder(placeholderBg, placeholderIcon),
         ),
       );
     }
@@ -61,7 +65,7 @@ class DesktopRightPanel extends StatelessWidget {
               height: 240,
               width: double.infinity,
               fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => _buildPlaceholder(),
+              errorBuilder: (_, _, _) => _buildPlaceholder(placeholderBg, placeholderIcon),
             ),
           );
         }
@@ -76,27 +80,27 @@ class DesktopRightPanel extends StatelessWidget {
           height: 240,
           width: double.infinity,
           fit: BoxFit.cover,
-          placeholder: (_, _) => _buildPlaceholder(),
-          errorWidget: (_, _, _) => _buildPlaceholder(),
+          placeholder: (_, _) => _buildPlaceholder(placeholderBg, placeholderIcon),
+          errorWidget: (_, _, _) => _buildPlaceholder(placeholderBg, placeholderIcon),
         ),
       );
     }
 
-    return _buildPlaceholder();
+    return _buildPlaceholder(placeholderBg, placeholderIcon);
   }
 
-  Widget _buildPlaceholder() {
+  Widget _buildPlaceholder(Color bgColor, Color iconColor) {
     return Container(
       height: 240,
       decoration: BoxDecoration(
-        color: const Color(0xFF282828),
+        color: bgColor,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Center(
         child: Icon(
           Icons.music_note_rounded,
           size: 64,
-          color: Colors.white.withAlpha(80),
+          color: iconColor,
         ),
       ),
     );
@@ -105,6 +109,14 @@ class DesktopRightPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final bg = settingsService?.backgroundColor ?? theme.scaffoldBackgroundColor;
+    final surface = settingsService?.surfaceColor ?? theme.colorScheme.surface;
+    final text = settingsService?.textColor ?? theme.colorScheme.onSurface;
+    final textMuted = text.withAlpha(170);
+    final textDim = text.withAlpha(110);
+    final border = text.withAlpha(20);
+    final cardBg = Color.lerp(surface, bg, 0.35) ?? surface;
+
     final current = track ?? playerService.currentTrack;
     final isLiked = current != null &&
         (playlistService?.isTrackLiked(current.id, current.title, current.author) ?? false);
@@ -122,7 +134,7 @@ class DesktopRightPanel extends StatelessWidget {
     }
 
     return Container(
-      color: const Color(0xFF121212),
+      color: surface,
       child: Column(
         children: [
           // Header Bar
@@ -134,21 +146,21 @@ class DesktopRightPanel extends StatelessWidget {
                   'Now Playing',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: text,
                     letterSpacing: -0.2,
                   ),
                 ),
                 const Spacer(),
                 IconButton(
                   tooltip: 'Close view',
-                  icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFFB3B3B3)),
+                  icon: Icon(Icons.close_rounded, size: 20, color: textMuted),
                   splashRadius: 18,
                   onPressed: onClose,
                 ),
               ],
             ),
           ),
-          const Divider(height: 1, color: Color(0xFF242424)),
+          Divider(height: 1, color: border),
 
           // Body
           Expanded(
@@ -156,7 +168,7 @@ class DesktopRightPanel extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               children: [
                 // Big Cover Art
-                _buildBigArtwork(context, current),
+                _buildBigArtwork(context, current, cardBg, textDim),
                 const SizedBox(height: 16),
 
                 // Title, Artist, & Like Button
@@ -169,8 +181,8 @@ class DesktopRightPanel extends StatelessWidget {
                         children: [
                           Text(
                             current?.title ?? 'No Track Playing',
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: text,
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                               letterSpacing: -0.3,
@@ -181,8 +193,8 @@ class DesktopRightPanel extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             current?.author ?? 'Choose a song to begin',
-                            style: const TextStyle(
-                              color: Color(0xFFB3B3B3),
+                            style: TextStyle(
+                              color: textMuted,
                               fontSize: 13,
                             ),
                             maxLines: 1,
@@ -196,7 +208,7 @@ class DesktopRightPanel extends StatelessWidget {
                         tooltip: isLiked ? 'Unlike' : 'Like',
                         icon: Icon(
                           isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                          color: isLiked ? accentColor : const Color(0xFFB3B3B3),
+                          color: isLiked ? accentColor : textMuted,
                           size: 22,
                         ),
                         splashRadius: 20,
@@ -213,9 +225,9 @@ class DesktopRightPanel extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1F1F1F),
+                    color: cardBg,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white.withAlpha(15)),
+                    border: Border.all(color: border),
                   ),
                   child: Row(
                     children: [
@@ -236,18 +248,18 @@ class DesktopRightPanel extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
+                            Text(
                               'Audio Stream',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: text,
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             Text(
                               current != null ? 'High Quality • InnerTube' : 'Idle',
-                              style: const TextStyle(
-                                color: Color(0xFFB3B3B3),
+                              style: TextStyle(
+                                color: textMuted,
                                 fontSize: 11,
                               ),
                             ),
@@ -262,7 +274,7 @@ class DesktopRightPanel extends StatelessWidget {
                           return Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: isPlaying ? accentColor.withAlpha(40) : Colors.white12,
+                              color: isPlaying ? accentColor.withAlpha(35) : text.withAlpha(20),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -270,7 +282,7 @@ class DesktopRightPanel extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.bold,
-                                color: isPlaying ? accentColor : Colors.white70,
+                                color: isPlaying ? accentColor : textMuted,
                                 letterSpacing: 0.5,
                               ),
                             ),
@@ -288,19 +300,19 @@ class DesktopRightPanel extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1F1F1F),
+                      color: cardBg,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white.withAlpha(15)),
+                      border: Border.all(color: border),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            const Text(
+                            Text(
                               'Next in queue',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: text,
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -338,8 +350,8 @@ class DesktopRightPanel extends StatelessWidget {
                                 children: [
                                   Text(
                                     nextTrack.title,
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: text,
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -348,8 +360,8 @@ class DesktopRightPanel extends StatelessWidget {
                                   ),
                                   Text(
                                     nextTrack.author,
-                                    style: const TextStyle(
-                                      color: Color(0xFFB3B3B3),
+                                    style: TextStyle(
+                                      color: textMuted,
                                       fontSize: 11,
                                     ),
                                     maxLines: 1,
@@ -372,4 +384,3 @@ class DesktopRightPanel extends StatelessWidget {
     );
   }
 }
-

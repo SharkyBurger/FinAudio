@@ -346,10 +346,14 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
       }
 
       if (mounted) {
+        final onAccent = widget.accentColor.computeLuminance() > 0.5 ? Colors.black : Colors.white;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Artwork update complete: fetched $fetchedCount tracks.'),
-            backgroundColor: const Color(0xFF1DB954),
+            content: Text(
+              'Artwork update complete: fetched $fetchedCount tracks.',
+              style: TextStyle(color: onAccent, fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: widget.accentColor,
           ),
         );
       }
@@ -363,7 +367,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
     }
   }
 
-  Widget _buildPlaylistCover(double size) {
+  Widget _buildPlaylistCover(double size, Color surface, Color bg, Color text, Color accent, Color onAccent) {
     final isLikedSongs = _playlist.id == PlaylistService.likedSongsId;
 
     if (isLikedSongs) {
@@ -371,17 +375,20 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
         width: size,
         height: size,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(4),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF450AF5), Color(0xFF8E8EE5)],
+          borderRadius: BorderRadius.circular(8),
+          gradient: LinearGradient(
+            colors: [
+              accent.withAlpha(220),
+              Color.lerp(accent, surface, 0.55) ?? accent,
+            ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
-              color: Colors.black45,
-              blurRadius: 16,
-              offset: Offset(0, 8),
+              color: bg.withAlpha(120),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
@@ -389,7 +396,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
           child: Icon(
             Icons.favorite_rounded,
             size: size * 0.4,
-            color: Colors.white,
+            color: onAccent,
           ),
         ),
       );
@@ -402,7 +409,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
           final f = File(Uri.parse(url).toFilePath());
           if (f.existsSync()) {
             return ClipRRect(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(8),
               child: Image.file(
                 f,
                 width: size,
@@ -417,7 +424,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
           final f = File(url);
           if (f.existsSync()) {
             return ClipRRect(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(8),
               child: Image.file(
                 f,
                 width: size,
@@ -430,33 +437,34 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
       }
 
       return ClipRRect(
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(8),
         child: CachedNetworkImage(
           imageUrl: url,
           width: size,
           height: size,
           fit: BoxFit.cover,
-          placeholder: (_, _) => _buildPlaceholderCover(size),
-          errorWidget: (_, _, _) => _buildPlaceholderCover(size),
+          placeholder: (_, _) => _buildPlaceholderCover(size, surface, bg, text),
+          errorWidget: (_, _, _) => _buildPlaceholderCover(size, surface, bg, text),
         ),
       );
     }
 
-    return _buildPlaceholderCover(size);
+    return _buildPlaceholderCover(size, surface, bg, text);
   }
 
-  Widget _buildPlaceholderCover(double size) {
+  Widget _buildPlaceholderCover(double size, Color surface, Color bg, Color text) {
+    final cardBg = Color.lerp(surface, bg, 0.4) ?? surface;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: const Color(0xFF282828),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: const [
+        color: cardBg,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
           BoxShadow(
-            color: Colors.black45,
+            color: bg.withAlpha(100),
             blurRadius: 16,
-            offset: Offset(0, 8),
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -464,13 +472,13 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
         child: Icon(
           Icons.music_note_rounded,
           size: size * 0.4,
-          color: Colors.white.withAlpha(80),
+          color: text.withAlpha(70),
         ),
       ),
     );
   }
 
-  Widget _buildTrackCover(LocalPlaylistTrack track, double size) {
+  Widget _buildTrackCover(LocalPlaylistTrack track, double size, Color placeholderBg, Color iconColor) {
     final thumb = track.thumbnailUrl;
     if (thumb != null && thumb.isNotEmpty) {
       if (thumb.startsWith('http://') || thumb.startsWith('https://')) {
@@ -484,8 +492,8 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
             errorWidget: (_, _, _) => Container(
               width: size,
               height: size,
-              color: const Color(0xFF282828),
-              child: Icon(Icons.music_note_rounded, size: size * 0.5, color: Colors.white38),
+              color: placeholderBg,
+              child: Icon(Icons.music_note_rounded, size: size * 0.5, color: iconColor),
             ),
           ),
         );
@@ -495,23 +503,32 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: const Color(0xFF282828),
+        color: placeholderBg,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Icon(Icons.music_note_rounded, size: size * 0.5, color: Colors.white38),
+      child: Icon(Icons.music_note_rounded, size: size * 0.5, color: iconColor),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLikedSongs = _playlist.id == PlaylistService.likedSongsId;
+    final theme = Theme.of(context);
+    final bg = widget.settingsService?.backgroundColor ?? theme.scaffoldBackgroundColor;
+    final surface = widget.settingsService?.surfaceColor ?? theme.colorScheme.surface;
+    final accent = widget.accentColor;
+    final text = widget.settingsService?.textColor ?? theme.colorScheme.onSurface;
+    final textMuted = text.withAlpha(170);
+    final textDim = text.withAlpha(110);
+    final border = text.withAlpha(22);
+    final inputBg = Color.lerp(surface, bg, 0.45) ?? surface;
+    final onAccent = accent.computeLuminance() > 0.5 ? const Color(0xFF101010) : const Color(0xFFFFFFFF);
+
     final currentTrack = widget.playerService.currentTrack;
     final isPlaying = widget.playerService.isPlaying;
     final tracks = _getFilteredAndSortedTracks();
-    final headerGradientColor = isLikedSongs ? const Color(0xFF450AF5) : widget.accentColor;
 
     return Container(
-      color: const Color(0xFF121212),
+      color: surface,
       child: CustomScrollView(
         slivers: [
           // Spotify Hero Header
@@ -520,8 +537,8 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    headerGradientColor.withAlpha(120),
-                    const Color(0xFF121212),
+                    accent.withAlpha(55),
+                    surface,
                   ],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -531,7 +548,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  _buildPlaylistCover(180),
+                  _buildPlaylistCover(180, surface, bg, text, accent, onAccent),
                   const SizedBox(width: 24),
                   Expanded(
                     child: Column(
@@ -544,16 +561,16 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.2,
-                            color: Colors.white.withAlpha(200),
+                            color: textDim,
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           _playlist.title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 42,
                             fontWeight: FontWeight.w900,
-                            color: Colors.white,
+                            color: text,
                             letterSpacing: -1.2,
                             height: 1.1,
                           ),
@@ -566,25 +583,25 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                             Flexible(
                               child: Text(
                                 _playlist.description.isNotEmpty ? _playlist.description : 'FinAudio',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                  color: text,
                                   fontSize: 13,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const Text(' • ', style: TextStyle(color: Colors.white70)),
+                            Text(' • ', style: TextStyle(color: textMuted)),
                             Text(
                               '${_playlist.tracks.length} songs',
-                              style: const TextStyle(color: Colors.white70, fontSize: 13),
+                              style: TextStyle(color: textMuted, fontSize: 13),
                             ),
                             if (_playlist.tracks.isNotEmpty) ...[
-                              const Text(' • ', style: TextStyle(color: Colors.white70)),
+                              Text(' • ', style: TextStyle(color: textMuted)),
                               Text(
                                 _formatTotalDuration(_totalDuration),
-                                style: const TextStyle(color: Colors.white54, fontSize: 13),
+                                style: TextStyle(color: textDim, fontSize: 13),
                               ),
                             ],
                           ],
@@ -612,11 +629,11 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                         width: 52,
                         height: 52,
                         decoration: BoxDecoration(
-                          color: widget.accentColor,
+                          color: accent,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: widget.accentColor.withAlpha(80),
+                              color: accent.withAlpha(80),
                               blurRadius: 14,
                               offset: const Offset(0, 4),
                             ),
@@ -626,7 +643,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                           child: Icon(
                             isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                             size: 30,
-                            color: Colors.black,
+                            color: onAccent,
                           ),
                         ),
                       ),
@@ -637,7 +654,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                   // Shuffle Button
                   IconButton(
                     tooltip: 'Shuffle Play',
-                    icon: const Icon(Icons.shuffle_rounded, size: 24, color: Color(0xFFB3B3B3)),
+                    icon: Icon(Icons.shuffle_rounded, size: 24, color: textMuted),
                     onPressed: () => _playAll(shuffle: true),
                   ),
 
@@ -652,10 +669,10 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                             height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: widget.accentColor,
+                              color: accent,
                             ),
                           )
-                        : const Icon(Icons.image_search_rounded, size: 22, color: Color(0xFFB3B3B3)),
+                        : Icon(Icons.image_search_rounded, size: 22, color: textMuted),
                     onPressed: _fetchingArtworks ? null : _fetchTrackArtworks,
                   ),
 
@@ -666,21 +683,21 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                     width: 220,
                     height: 34,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF242424),
+                      color: inputBg,
                       borderRadius: BorderRadius.circular(18),
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Row(
                       children: [
-                        const Icon(Icons.search_rounded, size: 16, color: Color(0xFFB3B3B3)),
+                        Icon(Icons.search_rounded, size: 16, color: textDim),
                         const SizedBox(width: 8),
                         Expanded(
                           child: TextField(
                             onChanged: (val) => setState(() => _searchQuery = val),
-                            style: const TextStyle(fontSize: 12, color: Colors.white),
-                            decoration: const InputDecoration(
+                            style: TextStyle(fontSize: 12, color: text),
+                            decoration: InputDecoration(
                               hintText: 'Search in playlist',
-                              hintStyle: TextStyle(fontSize: 12, color: Color(0xFF7A7A7A)),
+                              hintStyle: TextStyle(fontSize: 12, color: textDim),
                               border: InputBorder.none,
                               isDense: true,
                               contentPadding: EdgeInsets.zero,
@@ -690,7 +707,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                         if (_searchQuery.isNotEmpty)
                           GestureDetector(
                             onTap: () => setState(() => _searchQuery = ''),
-                            child: const Icon(Icons.close_rounded, size: 14, color: Color(0xFFB3B3B3)),
+                            child: Icon(Icons.close_rounded, size: 14, color: textDim),
                           ),
                       ],
                     ),
@@ -700,26 +717,26 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
 
                   // Sort Menu
                   PopupMenuButton<_DesktopPlaylistSort>(
-                    icon: const Icon(Icons.sort_rounded, color: Color(0xFFB3B3B3), size: 20),
+                    icon: Icon(Icons.sort_rounded, color: textMuted, size: 20),
                     tooltip: 'Sort By',
-                    color: const Color(0xFF282828),
+                    color: surface,
                     onSelected: (val) => setState(() => _sortOption = val),
                     itemBuilder: (context) => [
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: _DesktopPlaylistSort.original,
-                        child: Text('Custom order', style: TextStyle(color: Colors.white)),
+                        child: Text('Custom order', style: TextStyle(color: text)),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: _DesktopPlaylistSort.titleAsc,
-                        child: Text('Title (A-Z)', style: TextStyle(color: Colors.white)),
+                        child: Text('Title (A-Z)', style: TextStyle(color: text)),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: _DesktopPlaylistSort.artistAsc,
-                        child: Text('Artist', style: TextStyle(color: Colors.white)),
+                        child: Text('Artist', style: TextStyle(color: text)),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: _DesktopPlaylistSort.durationAsc,
-                        child: Text('Duration', style: TextStyle(color: Colors.white)),
+                        child: Text('Duration', style: TextStyle(color: text)),
                       ),
                     ],
                   ),
@@ -737,7 +754,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                 children: [
                   Row(
                     children: [
-                      const SizedBox(
+                      SizedBox(
                         width: 40,
                         child: Text(
                           '#',
@@ -745,44 +762,44 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFFB3B3B3),
+                            color: textDim,
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
-                      const Expanded(
+                      Expanded(
                         flex: 6,
                         child: Text(
                           'Title',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFFB3B3B3),
+                            color: textDim,
                           ),
                         ),
                       ),
-                      const Expanded(
+                      Expanded(
                         flex: 4,
                         child: Text(
                           'Artist',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFFB3B3B3),
+                            color: textDim,
                           ),
                         ),
                       ),
-                      const SizedBox(
+                      SizedBox(
                         width: 60,
                         child: Align(
                           alignment: Alignment.centerRight,
-                          child: Icon(Icons.access_time_rounded, size: 16, color: Color(0xFFB3B3B3)),
+                          child: Icon(Icons.access_time_rounded, size: 16, color: textDim),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 6),
-                  const Divider(height: 1, color: Color(0xFF282828)),
+                  Divider(height: 1, color: border),
                 ],
               ),
             ),
@@ -790,12 +807,12 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
 
           // Table Rows
           if (tracks.isEmpty)
-            const SliverFillRemaining(
+            SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
                 child: Text(
                   'No tracks found in playlist',
-                  style: TextStyle(color: Color(0xFFB3B3B3)),
+                  style: TextStyle(color: textDim),
                 ),
               ),
             )
@@ -821,12 +838,15 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                     onExit: (_) => setState(() => _hoveredIndex = null),
                     cursor: SystemMouseCursors.click,
                     child: GestureDetector(
+                      onTap: () => _playTrackAt(index),
                       onDoubleTap: () => _playTrackAt(index),
                       child: Container(
                         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                         decoration: BoxDecoration(
-                          color: isHovered ? Colors.white.withAlpha(20) : Colors.transparent,
+                          color: isHovered
+                              ? accent.withAlpha(22)
+                              : (isCurrentlyPlaying ? accent.withAlpha(14) : Colors.transparent),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Row(
@@ -838,10 +858,10 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                                   ? IconButton(
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),
-                                      icon: const Icon(
+                                      icon: Icon(
                                         Icons.play_arrow_rounded,
                                         size: 20,
-                                        color: Colors.white,
+                                        color: accent,
                                       ),
                                       onPressed: () => _playTrackAt(index),
                                     )
@@ -849,16 +869,14 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                                       ? Icon(
                                           Icons.volume_up_rounded,
                                           size: 16,
-                                          color: widget.accentColor,
+                                          color: accent,
                                         )
                                       : Text(
                                           '${index + 1}',
                                           textAlign: TextAlign.center,
                                           style: TextStyle(
                                             fontSize: 12,
-                                            color: isCurrentlyPlaying
-                                                ? widget.accentColor
-                                                : const Color(0xFFB3B3B3),
+                                            color: textDim,
                                           ),
                                         ),
                             ),
@@ -869,7 +887,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                               flex: 6,
                               child: Row(
                                 children: [
-                                  _buildTrackCover(t, 40),
+                                  _buildTrackCover(t, 40, inputBg, textDim),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
@@ -882,9 +900,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                                           style: TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w600,
-                                            color: isCurrentlyPlaying
-                                                ? widget.accentColor
-                                                : Colors.white,
+                                            color: isCurrentlyPlaying ? accent : text,
                                           ),
                                         ),
                                         const SizedBox(height: 2),
@@ -892,9 +908,9 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                                           t.artist,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 11,
-                                            color: Color(0xFFB3B3B3),
+                                            color: textMuted,
                                           ),
                                         ),
                                       ],
@@ -911,9 +927,9 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                                 t.artist.isNotEmpty ? t.artist : '—',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xFFB3B3B3),
+                                  color: textMuted,
                                 ),
                               ),
                             ),
@@ -924,7 +940,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                                 icon: Icon(
                                   isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                                   size: 16,
-                                  color: isLiked ? widget.accentColor : const Color(0xFFB3B3B3),
+                                  color: isLiked ? accent : textDim,
                                 ),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -942,18 +958,18 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                               child: Text(
                                 _formatDuration(t.duration),
                                 textAlign: TextAlign.right,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xFFB3B3B3),
+                                  color: textDim,
                                 ),
                               ),
                             ),
 
                             // Action Menu button
                             PopupMenuButton<String>(
-                              icon: const Icon(Icons.more_horiz_rounded, size: 16, color: Color(0xFFB3B3B3)),
+                              icon: Icon(Icons.more_horiz_rounded, size: 16, color: textDim),
                               padding: EdgeInsets.zero,
-                              color: const Color(0xFF282828),
+                              color: surface,
                               onSelected: (val) async {
                                 final trackObj = Track.fromLocalPlaylistTrack(t);
                                 if (val == 'play_next') {
@@ -965,7 +981,7 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                                     context: context,
                                     track: t,
                                     playlistService: widget.playlistService,
-                                    accentColor: widget.accentColor,
+                                    accentColor: accent,
                                   );
                                 } else if (val == 'remove') {
                                   final updatedTracks = List<LocalPlaylistTrack>.from(_playlist.tracks)
@@ -976,10 +992,10 @@ class _DesktopPlaylistViewState extends State<DesktopPlaylistView> {
                                 }
                               },
                               itemBuilder: (ctx) => [
-                                const PopupMenuItem(value: 'play_next', child: Text('Play next', style: TextStyle(color: Colors.white))),
-                                const PopupMenuItem(value: 'add_queue', child: Text('Add to queue', style: TextStyle(color: Colors.white))),
-                                const PopupMenuItem(value: 'add_playlist', child: Text('Add to playlist', style: TextStyle(color: Colors.white))),
-                                if (!isLikedSongs)
+                                PopupMenuItem(value: 'play_next', child: Text('Play next', style: TextStyle(color: text))),
+                                PopupMenuItem(value: 'add_queue', child: Text('Add to queue', style: TextStyle(color: text))),
+                                PopupMenuItem(value: 'add_playlist', child: Text('Add to playlist', style: TextStyle(color: text))),
+                                if (_playlist.id != PlaylistService.likedSongsId)
                                   const PopupMenuItem(value: 'remove', child: Text('Remove from playlist', style: TextStyle(color: Colors.redAccent))),
                               ],
                             ),
