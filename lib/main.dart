@@ -30,6 +30,7 @@ import 'package:finaudio/models/search_result.dart';
 import 'package:finaudio/widgets/add_to_playlist_sheet.dart';
 import 'package:finaudio/widgets/artist_picker_sheet.dart';
 import 'package:finaudio/widgets/google_sign_in_dialog.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 AudioHandler? audioHandler;
 
@@ -361,6 +362,36 @@ class _MainScaffoldState extends State<_MainScaffold> {
   int _currentIndex = 0;
   Track? _nowPlaying;
   StreamSubscription<Track?>? _trackSub;
+  final List<int> _navHistory = [0];
+  int _historyIndex = 0;
+
+  void _navigateTo(int index) {
+    if (index == _currentIndex) return;
+    if (_historyIndex < _navHistory.length - 1) {
+      _navHistory.removeRange(_historyIndex + 1, _navHistory.length);
+    }
+    _navHistory.add(index);
+    _historyIndex = _navHistory.length - 1;
+    setState(() => _currentIndex = index);
+  }
+
+  void _goBack() {
+    if (_historyIndex > 0) {
+      setState(() {
+        _historyIndex--;
+        _currentIndex = _navHistory[_historyIndex];
+      });
+    }
+  }
+
+  void _goForward() {
+    if (_historyIndex < _navHistory.length - 1) {
+      setState(() {
+        _historyIndex++;
+        _currentIndex = _navHistory[_historyIndex];
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -388,23 +419,24 @@ class _MainScaffoldState extends State<_MainScaffold> {
     if (mounted) setState(() {});
   }
 
-  List<Widget> _buildContentTabs(Color accentColor) {
+  List<Widget> _buildContentTabs(Color accentColor, {bool isDesktop = false}) {
     return [
       HomeTab(
+        isDesktop: isDesktop,
         playerService: widget.playerService,
         authService: widget.authService,
         playlistService: widget.playlistService,
         settingsService: widget.settingsService,
-        onOpenPlaylists: () => setState(() => _currentIndex = 2),
-        onOpenSearch: () => setState(() => _currentIndex = 1),
-        onOpenSettings: () => setState(() => _currentIndex = 3),
+        onOpenPlaylists: () => _navigateTo(2),
+        onOpenSearch: () => _navigateTo(1),
+        onOpenSettings: () => _navigateTo(3),
         onOpenPlaylistDetail: (playlist) {
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => LocalPlaylistDetailScreen(
                 playlist: playlist,
-                playerService: widget.playerService,
                 playlistService: widget.playlistService,
+                playerService: widget.playerService,
                 settingsService: widget.settingsService,
                 authService: widget.authService,
               ),
@@ -424,8 +456,8 @@ class _MainScaffoldState extends State<_MainScaffold> {
         authService: widget.authService,
         playlistService: widget.playlistService,
         settingsService: widget.settingsService,
-        onGoToSettings: () => setState(() => _currentIndex = 3),
-        onGoToPlayer: () => setState(() => _currentIndex = 0),
+        onGoToSettings: () => _navigateTo(3),
+        onGoToPlayer: () => _navigateTo(0),
         onOpenPlaylistDetail: (playlist) {
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -466,55 +498,105 @@ class _MainScaffoldState extends State<_MainScaffold> {
   Widget build(BuildContext context) {
     final accentColor = widget.settingsService.accentColor;
     final isDesktop = MediaQuery.of(context).size.width >= 800;
-    final contentTabs = _buildContentTabs(accentColor);
+    final contentTabs = _buildContentTabs(accentColor, isDesktop: isDesktop);
 
     if (isDesktop) {
+      final bg = widget.settingsService.backgroundColor;
+      final surface = widget.settingsService.surfaceColor;
+      final text = widget.settingsService.textColor;
+      final textMuted = text.withAlpha(170);
+      final textDim = text.withAlpha(110);
+      final border = text.withAlpha(20);
+      final cardBorder = text.withAlpha(22);
+      final onAccent = accentColor.computeLuminance() > 0.5
+          ? const Color(0xFF101010)
+          : const Color(0xFFFFFFFF);
+
       return Scaffold(
-        body: Column(
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  _DesktopSidebar(
-                    currentIndex: _currentIndex,
-                    onDestinationSelected: (i) => setState(() => _currentIndex = i),
-                    accentColor: accentColor,
-                    authService: widget.authService,
-                    playlistService: widget.playlistService,
-                    settingsService: widget.settingsService,
-                    onOpenPlaylistDetail: (playlist) {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => LocalPlaylistDetailScreen(
-                            playlist: playlist,
-                            playlistService: widget.playlistService,
-                            playerService: widget.playerService,
-                            settingsService: widget.settingsService,
-                            authService: widget.authService,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const VerticalDivider(width: 1, thickness: 1),
-                  Expanded(
-                    child: IndexedStack(
-                      index: _currentIndex.clamp(0, 3),
-                      children: contentTabs,
+        backgroundColor: bg,
+        body: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            children: [
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // 1. Left Sidebar Islands (Nav & Library)
+                    SizedBox(
+                      width: 280,
+                      child: _DesktopSidebar(
+                        currentIndex: _currentIndex,
+                        onDestinationSelected: _navigateTo,
+                        accentColor: accentColor,
+                        authService: widget.authService,
+                        playlistService: widget.playlistService,
+                        settingsService: widget.settingsService,
+                        onOpenPlaylistDetail: (playlist) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => LocalPlaylistDetailScreen(
+                                playlist: playlist,
+                                playlistService: widget.playlistService,
+                                playerService: widget.playerService,
+                                settingsService: widget.settingsService,
+                                authService: widget.authService,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+
+                    // 2. Main Center Stage Card Island
+                    Expanded(
+                      child: Material(
+                        color: surface,
+                        clipBehavior: Clip.antiAlias,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(color: cardBorder, width: 1),
+                        ),
+                        child: Column(
+                          children: [
+                            _buildDesktopCenterTopBar(
+                              context,
+                              surface,
+                              bg,
+                              border,
+                              accentColor,
+                              text,
+                              textMuted,
+                              textDim,
+                              onAccent,
+                            ),
+                            Expanded(
+                              child: IndexedStack(
+                                index: _currentIndex.clamp(0, 3),
+                                children: contentTabs,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            DesktopPlayerBar(
-              track: _nowPlaying,
-              accentColor: accentColor,
-              playerService: widget.playerService,
-              authService: widget.authService,
-              playlistService: widget.playlistService,
-              settingsService: widget.settingsService,
-            ),
-          ],
+              const SizedBox(height: 8),
+
+              // 3. Persistent Bottom Player Bar
+              DesktopPlayerBar(
+                track: _nowPlaying,
+                accentColor: accentColor,
+                playerService: widget.playerService,
+                authService: widget.authService,
+                playlistService: widget.playlistService,
+                settingsService: widget.settingsService,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -576,9 +658,157 @@ class _MainScaffoldState extends State<_MainScaffold> {
       ),
     );
   }
+
+  Widget _buildDesktopCenterTopBar(
+    BuildContext context,
+    Color surface,
+    Color bg,
+    Color border,
+    Color accent,
+    Color text,
+    Color textMuted,
+    Color textDim,
+    Color onAccent,
+  ) {
+    final canGoBack = _historyIndex > 0;
+    final canGoForward = _historyIndex < _navHistory.length - 1;
+    final user = widget.authService.currentUser;
+    final isSignedIn = widget.authService.isSignedIn && user != null;
+    final headerBg = Color.lerp(surface, bg, 0.25) ?? surface;
+
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: headerBg,
+        border: Border(bottom: BorderSide(color: border, width: 1)),
+      ),
+      child: Row(
+        children: [
+          // Back Button
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: canGoBack ? text.withAlpha(25) : text.withAlpha(10),
+            ),
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              icon: Icon(Icons.chevron_left_rounded, size: 24, color: canGoBack ? text : textDim),
+              onPressed: canGoBack ? _goBack : null,
+              tooltip: 'Go back',
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Forward Button
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: canGoForward ? text.withAlpha(25) : text.withAlpha(10),
+            ),
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              icon: Icon(Icons.chevron_right_rounded, size: 24, color: canGoForward ? text : textDim),
+              onPressed: canGoForward ? _goForward : null,
+              tooltip: 'Go forward',
+            ),
+          ),
+          const Spacer(),
+          // Settings Shortcut
+          IconButton(
+            tooltip: 'Settings',
+            icon: Icon(
+              _currentIndex == 3 ? Icons.settings_rounded : Icons.settings_outlined,
+              color: _currentIndex == 3 ? accent : textMuted,
+              size: 20,
+            ),
+            onPressed: () => _navigateTo(3),
+          ),
+          const SizedBox(width: 8),
+          // User Profile Pill / Log In Button
+          if (isSignedIn)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: bg.withAlpha(200),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: border),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 12,
+                    backgroundImage: (user.photoUrl != null && user.photoUrl!.isNotEmpty)
+                        ? NetworkImage(user.photoUrl!)
+                        : null,
+                    backgroundColor: accent.withAlpha(40),
+                    child: (user.photoUrl == null || user.photoUrl!.isEmpty)
+                        ? Icon(Icons.person, color: accent, size: 14)
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    user.displayName ?? 'Account',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: text,
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.arrow_drop_down_rounded, color: textMuted, size: 20),
+                    padding: EdgeInsets.zero,
+                    color: surface,
+                    onSelected: (val) async {
+                      if (val == 'settings') {
+                        _navigateTo(3);
+                      } else if (val == 'signout') {
+                        await widget.authService.signOut();
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      PopupMenuItem(
+                        value: 'settings',
+                        child: Text('Settings', style: TextStyle(color: text)),
+                      ),
+                      const PopupMenuItem(
+                        value: 'signout',
+                        child: Text('Sign Out', style: TextStyle(color: Colors.redAccent)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )
+          else
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: onAccent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+              onPressed: () {
+                showGoogleSignInDialog(
+                  context: context,
+                  authService: widget.authService,
+                  accentColor: accent,
+                );
+              },
+              child: const Text('Log in'),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
-class _DesktopSidebar extends StatelessWidget {
+class _DesktopSidebar extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onDestinationSelected;
   final Color accentColor;
@@ -598,384 +828,73 @@ class _DesktopSidebar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final surface = theme.colorScheme.surface;
-    final text = theme.colorScheme.onSurface;
-    final user = authService.currentUser;
-    final isSignedIn = authService.isSignedIn && user != null;
+  State<_DesktopSidebar> createState() => _DesktopSidebarState();
+}
 
-    final likedSongs = playlistService.likedSongsPlaylist;
-    final otherPlaylists = playlistService.playlists
-        .where((p) => p.id != PlaylistService.likedSongsId)
-        .toList();
+class _DesktopSidebarState extends State<_DesktopSidebar> {
+  String _searchFilter = '';
+  final TextEditingController _filterController = TextEditingController();
 
-    return Container(
-      width: 240,
-      color: surface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Logo & Branding
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-            child: Row(
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: accentColor.withAlpha(35),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: accentColor.withAlpha(70)),
-                  ),
-                  child: Center(
-                    child: Icon(Icons.graphic_eq_rounded, color: accentColor, size: 22),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'FinAudio',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: text,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    Text(
-                      'Desktop Player',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+  @override
+  void initState() {
+    super.initState();
+    widget.playlistService.addListener(_onServiceChanged);
+    widget.authService.addListener(_onServiceChanged);
+  }
 
-          const SizedBox(height: 6),
+  @override
+  void dispose() {
+    _filterController.dispose();
+    widget.playlistService.removeListener(_onServiceChanged);
+    widget.authService.removeListener(_onServiceChanged);
+    super.dispose();
+  }
 
-          // Main Navigation
-          _SidebarItem(
-            icon: currentIndex == 0 ? Icons.home_rounded : Icons.home_outlined,
-            label: 'Home',
-            isSelected: currentIndex == 0,
-            accentColor: accentColor,
-            onTap: () => onDestinationSelected(0),
-          ),
-          _SidebarItem(
-            icon: currentIndex == 1 ? Icons.search_rounded : Icons.search_outlined,
-            label: 'Search',
-            isSelected: currentIndex == 1,
-            accentColor: accentColor,
-            onTap: () => onDestinationSelected(1),
-          ),
-          _SidebarItem(
-            icon: currentIndex == 2 ? Icons.local_library_rounded : Icons.local_library_outlined,
-            label: 'Library',
-            isSelected: currentIndex == 2,
-            accentColor: accentColor,
-            onTap: () => onDestinationSelected(2),
-          ),
-          _SidebarItem(
-            icon: currentIndex == 3 ? Icons.settings_rounded : Icons.settings_outlined,
-            label: 'Settings',
-            isSelected: currentIndex == 3,
-            accentColor: accentColor,
-            onTap: () => onDestinationSelected(3),
-          ),
-
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Divider(height: 1),
-          ),
-
-          // Library Playlists Header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Row(
-              children: [
-                Text(
-                  'YOUR PLAYLISTS',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  tooltip: 'Create Playlist',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                  onPressed: () => _showCreatePlaylistDialog(context),
-                ),
-              ],
-            ),
-          ),
-
-          // Liked Songs Item
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-            child: Material(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () => onOpenPlaylistDetail(likedSongs),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(6),
-                          gradient: LinearGradient(
-                            colors: [accentColor, accentColor.withAlpha(160)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        child: const Icon(Icons.favorite_rounded, color: Colors.black, size: 16),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Liked Songs',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: text,
-                              ),
-                            ),
-                            Text(
-                              '${likedSongs.tracks.length} tracks',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // Scrollable Playlists
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-              itemCount: otherPlaylists.length,
-              itemBuilder: (context, i) {
-                final p = otherPlaylists[i];
-                return Material(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () => onOpenPlaylistDetail(p),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.queue_music_rounded,
-                            size: 18,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              p.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: text.withAlpha(220),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          const Divider(height: 1),
-
-          // Bottom Account Tile / Google Login
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: isSignedIn
-                ? Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest.withAlpha(120),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        if (user.photoUrl != null && user.photoUrl!.isNotEmpty)
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundImage: NetworkImage(user.photoUrl!),
-                          )
-                        else
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundColor: accentColor.withAlpha(40),
-                            child: Icon(Icons.person, color: accentColor, size: 18),
-                          ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                user.displayName ?? 'YouTube User',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: text,
-                                ),
-                              ),
-                              Text(
-                                user.email,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        PopupMenuButton<String>(
-                          icon: Icon(Icons.more_vert_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
-                          onSelected: (val) async {
-                            if (val == 'settings') {
-                              onDestinationSelected(3);
-                            } else if (val == 'signout') {
-                              await authService.signOut();
-                            }
-                          },
-                          itemBuilder: (ctx) => [
-                            const PopupMenuItem(
-                              value: 'settings',
-                              child: Text('Account Settings'),
-                            ),
-                            const PopupMenuItem(
-                              value: 'signout',
-                              child: Text('Sign Out', style: TextStyle(color: Colors.redAccent)),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  )
-                : InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      showGoogleSignInDialog(
-                        context: context,
-                        authService: authService,
-                        accentColor: accentColor,
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: accentColor.withAlpha(25),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: accentColor.withAlpha(60)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.account_circle_outlined, color: accentColor, size: 22),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Sign in with Google',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: accentColor,
-                                  ),
-                                ),
-                                Text(
-                                  'Sync YouTube playlists',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(Icons.chevron_right_rounded, color: accentColor, size: 18),
-                        ],
-                      ),
-                    ),
-                  ),
-          ),
-        ],
-      ),
-    );
+  void _onServiceChanged() {
+    if (mounted) setState(() {});
   }
 
   void _showCreatePlaylistDialog(BuildContext context) {
+    final surface = widget.settingsService.surfaceColor;
+    final text = widget.settingsService.textColor;
+    final textMuted = text.withAlpha(170);
+    final accent = widget.accentColor;
+    final onAccent = accent.computeLuminance() > 0.5 ? const Color(0xFF101010) : const Color(0xFFFFFFFF);
+
     final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('New Playlist'),
+        backgroundColor: surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text('New Playlist', style: TextStyle(color: text, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
+          style: TextStyle(color: text),
+          decoration: InputDecoration(
             hintText: 'Playlist name',
+            hintStyle: TextStyle(color: textMuted),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: textMuted)),
           ),
-          FilledButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: onAccent,
+            ),
             onPressed: () async {
               final name = controller.text.trim();
               if (name.isNotEmpty) {
-                await playlistService.createPlaylist(title: name);
-                if (ctx.mounted) Navigator.pop(ctx);
+                final pl = await widget.playlistService.createPlaylist(title: name);
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  widget.onOpenPlaylistDetail(pl);
+                }
               }
             },
             child: const Text('Create'),
@@ -984,10 +903,429 @@ class _DesktopSidebar extends StatelessWidget {
       ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    final surface = widget.settingsService.surfaceColor;
+    final text = widget.settingsService.textColor;
+    final textMuted = text.withAlpha(170);
+    final textDim = text.withAlpha(110);
+    final cardBorder = text.withAlpha(22);
+    final inputBg = Color.lerp(surface, widget.settingsService.backgroundColor, 0.45) ?? surface;
+    final user = widget.authService.currentUser;
+    final isSignedIn = widget.authService.isSignedIn && user != null;
+
+    final likedSongs = widget.playlistService.likedSongsPlaylist;
+    var playlists = widget.playlistService.playlists
+        .where((p) => p.id != PlaylistService.likedSongsId)
+        .toList();
+
+    if (_searchFilter.isNotEmpty) {
+      playlists = playlists
+          .where((p) => p.title.toLowerCase().contains(_searchFilter.toLowerCase()))
+          .toList();
+    }
+
+    return Column(
+      children: [
+        // 1. Top Navigation Card (Spotify Island 1)
+        Material(
+          color: surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: cardBorder, width: 1),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // FinAudio Brand Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: widget.accentColor.withAlpha(35),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: widget.accentColor.withAlpha(90)),
+                        ),
+                        child: Center(
+                          child: Icon(Icons.graphic_eq_rounded, color: widget.accentColor, size: 20),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'FinAudio',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              color: text,
+                              letterSpacing: -0.4,
+                            ),
+                          ),
+                          Text(
+                            'Desktop Player',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: textDim,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                _SidebarItem(
+                  icon: Icons.home_outlined,
+                  activeIcon: Icons.home_rounded,
+                  label: 'Home',
+                  isSelected: widget.currentIndex == 0,
+                  accentColor: widget.accentColor,
+                  onTap: () => widget.onDestinationSelected(0),
+                ),
+                _SidebarItem(
+                  icon: Icons.search_rounded,
+                  activeIcon: Icons.search_rounded,
+                  label: 'Search',
+                  isSelected: widget.currentIndex == 1,
+                  accentColor: widget.accentColor,
+                  onTap: () => widget.onDestinationSelected(1),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        // 2. Your Library Card (Spotify Island 2)
+        Expanded(
+          child: Material(
+            color: surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: cardBorder, width: 1),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Library Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 10, 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.library_music_rounded, color: textMuted, size: 22),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Your Library',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: textMuted,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: 'Create playlist',
+                        icon: Icon(Icons.add_rounded, size: 20, color: textMuted),
+                        splashRadius: 18,
+                        onPressed: () => _showCreatePlaylistDialog(context),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Search / Filter Input Box
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  child: Container(
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: inputBg,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.search_rounded, size: 16, color: textDim),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: TextField(
+                            controller: _filterController,
+                            onChanged: (val) => setState(() => _searchFilter = val.trim()),
+                            style: TextStyle(fontSize: 12, color: text),
+                            decoration: InputDecoration(
+                              hintText: 'Search in Your Library',
+                              hintStyle: TextStyle(fontSize: 11, color: textDim),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ),
+                        if (_searchFilter.isNotEmpty)
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              _filterController.clear();
+                              setState(() => _searchFilter = '');
+                            },
+                            child: Icon(Icons.close_rounded, size: 14, color: textDim),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 4),
+
+                // Scrollable Playlists
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    children: [
+                      // Pinned Liked Songs Item
+                      Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(6),
+                          onTap: () => widget.onOpenPlaylistDetail(likedSongs),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(4),
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        widget.accentColor,
+                                        Color.lerp(widget.accentColor, surface, 0.45) ?? widget.accentColor,
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                  ),
+                                  child: const Center(
+                                    child: Icon(Icons.favorite_rounded, color: Colors.white, size: 20),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Liked Songs',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: text,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Row(
+                                        children: [
+                                          Icon(Icons.push_pin_rounded, size: 11, color: widget.accentColor),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              'Playlist • ${likedSongs.tracks.length} songs',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: textDim,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // User Created & Imported Playlists
+                      for (final p in playlists) ...[
+                        const SizedBox(height: 2),
+                        Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(6),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () => widget.onOpenPlaylistDetail(p),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              child: Row(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Container(
+                                      width: 44,
+                                      height: 44,
+                                      color: inputBg,
+                                      child: (p.thumbnailUrl.isNotEmpty)
+                                          ? CachedNetworkImage(
+                                              imageUrl: p.thumbnailUrl,
+                                              fit: BoxFit.cover,
+                                              errorWidget: (_, _, _) => Icon(
+                                                Icons.music_note_rounded,
+                                                color: textDim,
+                                              ),
+                                            )
+                                          : Icon(
+                                              Icons.queue_music_rounded,
+                                              color: textDim,
+                                            ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          p.title,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: text,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Playlist • ${p.tracks.length} songs',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: textDim,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                const Divider(height: 1),
+
+                // Bottom Account / Sync Row
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: isSignedIn
+                      ? Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundImage: (user.photoUrl != null && user.photoUrl!.isNotEmpty)
+                                  ? NetworkImage(user.photoUrl!)
+                                  : null,
+                              backgroundColor: widget.accentColor.withAlpha(40),
+                              child: (user.photoUrl == null || user.photoUrl!.isEmpty)
+                                  ? Icon(Icons.person, color: widget.accentColor, size: 16)
+                                  : null,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    user.displayName ?? 'Account',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: text,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    'Connected',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.greenAccent.shade400,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        )
+                      : Material(
+                          color: widget.accentColor.withAlpha(25),
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () {
+                              showGoogleSignInDialog(
+                                context: context,
+                                authService: widget.authService,
+                                accentColor: widget.accentColor,
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.account_circle_outlined, color: widget.accentColor, size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Sign in to sync',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: widget.accentColor,
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(Icons.chevron_right_rounded, color: widget.accentColor, size: 16),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _SidebarItem extends StatelessWidget {
   final IconData icon;
+  final IconData activeIcon;
   final String label;
   final bool isSelected;
   final Color accentColor;
@@ -995,6 +1333,7 @@ class _SidebarItem extends StatelessWidget {
 
   const _SidebarItem({
     required this.icon,
+    required this.activeIcon,
     required this.label,
     required this.isSelected,
     required this.accentColor,
@@ -1007,28 +1346,28 @@ class _SidebarItem extends StatelessWidget {
     final text = theme.colorScheme.onSurface;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       child: Material(
         color: isSelected ? accentColor.withAlpha(35) : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         child: InkWell(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Row(
               children: [
                 Icon(
-                  icon,
+                  isSelected ? activeIcon : icon,
                   size: 22,
                   color: isSelected ? accentColor : text.withAlpha(190),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Text(
                   label,
                   style: TextStyle(
                     fontSize: 14,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                     color: isSelected ? accentColor : text.withAlpha(220),
                   ),
                 ),
@@ -2205,8 +2544,10 @@ class _SearchTabState extends State<SearchTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return SafeArea(
-      child: Column(
+    return Material(
+      color: Colors.transparent,
+      child: SafeArea(
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
@@ -2305,8 +2646,9 @@ class _SearchTabState extends State<SearchTab> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildBody(ThemeData theme) {
     if (_loading) {

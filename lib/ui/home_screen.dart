@@ -33,6 +33,7 @@ class HomeTab extends StatefulWidget {
   final VoidCallback onOpenSearch;
   final VoidCallback onOpenSettings;
   final void Function(LocalPlaylist playlist) onOpenPlaylistDetail;
+  final bool isDesktop;
 
   const HomeTab({
     super.key,
@@ -44,6 +45,7 @@ class HomeTab extends StatefulWidget {
     required this.onOpenSearch,
     required this.onOpenSettings,
     required this.onOpenPlaylistDetail,
+    this.isDesktop = false,
   });
 
   @override
@@ -2082,7 +2084,8 @@ class _HomeTabState extends State<HomeTab> {
           controller: _scrollController,
           slivers: [
             // 1. Pinned / Floating Top App Bar (FinAudio Brand & Action Buttons)
-            SliverAppBar(
+            if (!widget.isDesktop)
+              SliverAppBar(
               backgroundColor: bg,
               elevation: 0,
               scrolledUnderElevation: 2,
@@ -2156,6 +2159,9 @@ class _HomeTabState extends State<HomeTab> {
                 const SizedBox(width: 14),
               ],
             ),
+
+            if (widget.isDesktop)
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
             // 2. Horizontal Mood/Genre Filter Chips
             SliverToBoxAdapter(
@@ -2484,6 +2490,7 @@ class _HomeTabState extends State<HomeTab> {
                   MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                       onTap: () => widget.onOpenPlaylistDetail(likedPlaylist),
                       child: Container(
                         width: itemWidth,
@@ -2541,6 +2548,7 @@ class _HomeTabState extends State<HomeTab> {
                     return MouseRegion(
                       cursor: SystemMouseCursors.click,
                       child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                         onTap: () {
                           if (item.onTap != null) {
                             item.onTap!();
@@ -3355,6 +3363,7 @@ class _HomeTabState extends State<HomeTab> {
                         right: 0,
                         bottom: 0,
                         child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                           onTap: () => _playMixCard(mix.title, primaryArtist),
                           child: Container(
                             width: 36,
