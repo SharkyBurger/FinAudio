@@ -36,10 +36,18 @@ class NowPlayingBar extends StatelessWidget {
         ? const Color(0xFF101010)
         : Colors.white;
 
+    final hasWallpaper = settingsService != null &&
+        settingsService!.hasWallpaper &&
+        settingsService!.wallpaperPath != null &&
+        File(settingsService!.wallpaperPath!).existsSync();
+    final cardOpacity = hasWallpaper ? settingsService!.wallpaperCardOpacity : 1.0;
+    final barColor = settingsService?.playerBarColor ?? theme.colorScheme.surfaceContainerHighest;
+    final effectiveBarColor = barColor.withValues(alpha: cardOpacity);
+
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
+        color: effectiveBarColor,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withAlpha(50),
@@ -391,10 +399,18 @@ class _DesktopPlayerBarState extends State<DesktopPlayerBar> {
     final isLiked = track != null &&
         (widget.playlistService?.isTrackLiked(track.id, track.title, track.author) ?? false);
 
+    final hasWallpaper = widget.settingsService != null &&
+        widget.settingsService!.hasWallpaper &&
+        widget.settingsService!.wallpaperPath != null &&
+        File(widget.settingsService!.wallpaperPath!).existsSync();
+    final cardOpacity = hasWallpaper ? widget.settingsService!.wallpaperCardOpacity : 1.0;
+    final barColor = widget.settingsService?.playerBarColor ?? theme.colorScheme.surface;
+    final effectiveBarColor = barColor.withValues(alpha: cardOpacity);
+
     return Container(
       height: 88,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: effectiveBarColor,
         border: Border(
           top: BorderSide(
             color: theme.colorScheme.outlineVariant.withAlpha(50),

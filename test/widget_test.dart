@@ -255,6 +255,114 @@ void main() {
       expect(service.isArtistFollowed('Coldplay'), false);
       expect(service.favoriteArtists.isEmpty, true);
     });
+
+    test('Ellen Joe (ZZZ) theme preset is defined with character palette and applies cleanly', () async {
+      SharedPreferences.setMockInitialValues({});
+      final service = SettingsService();
+      await service.init();
+
+      final ellenPreset = SettingsService.presets.firstWhere((p) => p.id == 'ellen_joe');
+      expect(ellenPreset.name, 'Ellen Joe (ZZZ)');
+      expect(ellenPreset.backgroundColor, const Color(0xFF101216));
+      expect(ellenPreset.surfaceColor, const Color(0xFF1B1E26));
+      expect(ellenPreset.accentColor, const Color(0xFFFF2A4D));
+      expect(ellenPreset.textColor, const Color(0xFFF4F6FA));
+      expect(ellenPreset.cardColor, const Color(0xFF242833));
+      expect(ellenPreset.playerBarColor, const Color(0xFF161820));
+      expect(ellenPreset.secondaryTextColor, const Color(0xFFA5ADBF));
+      expect(ellenPreset.secondaryAccentColor, const Color(0xFF00E5FF));
+
+      await service.applyPreset(ellenPreset);
+      expect(service.backgroundColor, const Color(0xFF101216));
+      expect(service.surfaceColor, const Color(0xFF1B1E26));
+      expect(service.accentColor, const Color(0xFFFF2A4D));
+      expect(service.textColor, const Color(0xFFF4F6FA));
+      expect(service.cardColor, const Color(0xFF242833));
+      expect(service.playerBarColor, const Color(0xFF161820));
+      expect(service.secondaryTextColor, const Color(0xFFA5ADBF));
+      expect(service.secondaryAccentColor, const Color(0xFF00E5FF));
+
+      // Verify persistence across reloaded instance
+      final reloaded = SettingsService();
+      await reloaded.init();
+      expect(reloaded.accentColor, const Color(0xFFFF2A4D));
+      expect(reloaded.cardColor, const Color(0xFF242833));
+      expect(reloaded.secondaryAccentColor, const Color(0xFF00E5FF));
+    });
+
+    test('SettingsService manages and persists extended custom colors', () async {
+      SharedPreferences.setMockInitialValues({});
+      final service = SettingsService();
+      await service.init();
+
+      expect(service.customCardColor, isNull);
+      expect(service.cardColor, service.surfaceColor);
+
+      const customCard = Color(0xFF2A2B30);
+      const customPlayerBar = Color(0xFF181920);
+      const customSecText = Color(0xFF8899AA);
+      const customSecAccent = Color(0xFF00FFCC);
+
+      await service.setCardColor(customCard);
+      await service.setPlayerBarColor(customPlayerBar);
+      await service.setSecondaryTextColor(customSecText);
+      await service.setSecondaryAccentColor(customSecAccent);
+
+      expect(service.cardColor, customCard);
+      expect(service.playerBarColor, customPlayerBar);
+      expect(service.secondaryTextColor, customSecText);
+      expect(service.secondaryAccentColor, customSecAccent);
+
+      final reloaded = SettingsService();
+      await reloaded.init();
+      expect(reloaded.cardColor, customCard);
+      expect(reloaded.playerBarColor, customPlayerBar);
+      expect(reloaded.secondaryTextColor, customSecText);
+      expect(reloaded.secondaryAccentColor, customSecAccent);
+    });
+
+    test('SettingsService manages and persists wallpaper settings and resets cleanly', () async {
+      SharedPreferences.setMockInitialValues({});
+      final service = SettingsService();
+      await service.init();
+
+      expect(service.hasWallpaper, false);
+      expect(service.wallpaperPath, isNull);
+      expect(service.wallpaperBrightness, 0.0);
+      expect(service.wallpaperContrast, 1.0);
+      expect(service.wallpaperVignette, 0.0);
+      expect(service.wallpaperBlur, 0.0);
+      expect(service.wallpaperCardOpacity, 0.85);
+
+      await service.setWallpaperPath(r'C:\wallpapers\ellen_joe.png');
+      await service.setWallpaperBrightness(0.2);
+      await service.setWallpaperContrast(1.3);
+      await service.setWallpaperVignette(0.5);
+      await service.setWallpaperBlur(4.0);
+      await service.setWallpaperCardOpacity(0.7);
+
+      expect(service.hasWallpaper, true);
+      expect(service.wallpaperPath, r'C:\wallpapers\ellen_joe.png');
+      expect(service.wallpaperBrightness, 0.2);
+      expect(service.wallpaperContrast, 1.3);
+      expect(service.wallpaperVignette, 0.5);
+      expect(service.wallpaperBlur, 4.0);
+      expect(service.wallpaperCardOpacity, 0.7);
+
+      final reloaded = SettingsService();
+      await reloaded.init();
+      expect(reloaded.hasWallpaper, true);
+      expect(reloaded.wallpaperPath, r'C:\wallpapers\ellen_joe.png');
+      expect(reloaded.wallpaperBrightness, 0.2);
+      expect(reloaded.wallpaperContrast, 1.3);
+      expect(reloaded.wallpaperVignette, 0.5);
+      expect(reloaded.wallpaperBlur, 4.0);
+      expect(reloaded.wallpaperCardOpacity, 0.7);
+
+      await reloaded.clearWallpaper();
+      expect(reloaded.hasWallpaper, false);
+      expect(reloaded.wallpaperPath, isNull);
+    });
   });
 
   group('Volume control tests', () {

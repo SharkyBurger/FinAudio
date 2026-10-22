@@ -1,7 +1,7 @@
 name: finaudio
 description: "Ad-free YouTube audio player with Google playlist sync."
 publish_to: 'none'
-version: 0.4.2+1
+version: 0.4.3+1
 
 environment:
   sdk: ^3.13.0
@@ -30,6 +30,7 @@ dependencies:
   dart_discord_presence:
     path: packages/dart_discord_presence
   webview_flutter: ^4.10.0
+  file_picker: ^11.0.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

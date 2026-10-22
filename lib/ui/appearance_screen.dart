@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:finaudio/widgets/app_wallpaper_backdrop.dart';
 
 import 'package:finaudio/services/settings_service.dart';
 
@@ -47,6 +50,39 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     return color.computeLuminance() > 0.5
         ? const Color(0xFF101010)
         : const Color(0xFFFFFFFF);
+  }
+
+  Future<void> _pickWallpaper() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'],
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final path = result.files.single.path;
+        if (path != null && path.isNotEmpty) {
+          await _settings.setWallpaperPath(path);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Wallpaper applied!'),
+                backgroundColor: _settings.surfaceColor,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to select wallpaper: $e'),
+            backgroundColor: Colors.red.shade900,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _openColorDialog({
@@ -265,6 +301,12 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
           _buildPresetsCarousel(bg, surface, accent, text),
           const SizedBox(height: 24),
 
+          // Section 3: App Wallpaper Backdrop
+          _buildSectionTitle('Background Wallpaper', text, accent),
+          const SizedBox(height: 12),
+          _buildWallpaperSection(surface, accent, text),
+          const SizedBox(height: 24),
+
           // Section 3: Fine-Grained Custom Colors
           _buildSectionTitle('Customize Colors', text, accent),
           const SizedBox(height: 12),
@@ -372,6 +414,110 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             ),
           ),
 
+          const SizedBox(height: 10),
+
+          // Card & Tile Surface Color Tile
+          _buildColorTile(
+            title: 'Card & Tile Surface',
+            subtitle: 'Sidebar items, song rows, and shelf tiles',
+            color: _settings.cardColor,
+            icon: Icons.view_compact_rounded,
+            surfaceColor: surface,
+            textColor: text,
+            onTap: () => _openColorDialog(
+              title: 'Pick Card & Tile Color',
+              currentColor: _settings.cardColor,
+              quickPalette: const [
+                Color(0xFF262414), // Lemon Shark Dark
+                Color(0xFF242833), // Ellen Joe Gunmetal
+                Color(0xFF161616), // Dark
+                Color(0xFF0D0D0D), // OLED
+                Color(0xFF151F32), // Midnight
+                Color(0xFF17241D), // Emerald
+                Color(0xFF241720), // Sunset
+                Color(0xFF242730), // Slate
+              ],
+              onSelected: (color) => _settings.setCardColor(color),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Player Bar Surface Color Tile
+          _buildColorTile(
+            title: 'Player Bar Surface',
+            subtitle: 'Bottom player bar and now-playing controls',
+            color: _settings.playerBarColor,
+            icon: Icons.play_circle_outline_rounded,
+            surfaceColor: surface,
+            textColor: text,
+            onTap: () => _openColorDialog(
+              title: 'Pick Player Bar Color',
+              currentColor: _settings.playerBarColor,
+              quickPalette: const [
+                Color(0xFF1E1C10), // Lemon Shark Dark
+                Color(0xFF161820), // Ellen Joe Trench
+                Color(0xFF121212), // Dark
+                Color(0xFF000000), // Pure OLED
+                Color(0xFF0F1523), // Midnight
+                Color(0xFF121C16), // Emerald
+                Color(0xFF1C121A), // Sunset
+                Color(0xFF1C1E24), // Slate
+              ],
+              onSelected: (color) => _settings.setPlayerBarColor(color),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Secondary Text Color Tile
+          _buildColorTile(
+            title: 'Secondary Text',
+            subtitle: 'Artist names, subtitles, timestamps, and details',
+            color: _settings.secondaryTextColor,
+            icon: Icons.subtitles_rounded,
+            surfaceColor: surface,
+            textColor: text,
+            onTap: () => _openColorDialog(
+              title: 'Pick Secondary Text Color',
+              currentColor: _settings.secondaryTextColor,
+              quickPalette: const [
+                Color(0xFFFAF7E6), // Lemon Shark Cream
+                Color(0xFFA5ADBF), // Ellen Joe Shark Fin Silver
+                Color(0xFFB0B0B0), // Classic Grey
+                Color(0xFF8FA3BF), // Slate Grey
+                Color(0xFF90CAF9), // Light Ice Blue
+                Color(0xFFA5D6A7), // Soft Sage
+                Color(0xFFFFCC80), // Soft Peach
+                Color(0xFFFFFFFF), // Crisp White
+              ],
+              onSelected: (color) => _settings.setSecondaryTextColor(color),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Secondary Accent Color Tile
+          _buildColorTile(
+            title: 'Secondary Accent',
+            subtitle: 'Special badges, highlights, and secondary actions',
+            color: _settings.secondaryAccentColor,
+            icon: Icons.auto_awesome_rounded,
+            surfaceColor: surface,
+            textColor: text,
+            onTap: () => _openColorDialog(
+              title: 'Pick Secondary Accent Color',
+              currentColor: _settings.secondaryAccentColor,
+              quickPalette: const [
+                Color(0xFFFFDE38), // Lemon Shark Yellow
+                Color(0xFF00E5FF), // Ellen Joe Frost Cyan
+                Color(0xFFFF2A4D), // Ellen Joe Crimson
+                Color(0xFF00B0FF), // Electric Blue
+                Color(0xFF1DB954), // Spotify Green
+                Color(0xFFFF5722), // Vibrant Orange
+                Color(0xFFE040FB), // Neon Purple
+                Color(0xFFFFD700), // Pure Gold
+              ],
+              onSelected: (color) => _settings.setSecondaryAccentColor(color),
+            ),
+          ),
           const SizedBox(height: 28),
 
           // Reset to default button
@@ -424,11 +570,20 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     Color text,
   ) {
     final onAccent = _onColorFor(accent);
+    final cardCol = _settings.cardColor;
+    final playerBarCol = _settings.playerBarColor;
+    final secondaryTextCol = _settings.secondaryTextColor;
+    final secondaryAccentCol = _settings.secondaryAccentColor;
+    final onSecondaryAccent = _onColorFor(secondaryAccentCol);
+    final hasWallpaper = _settings.hasWallpaper &&
+        _settings.wallpaperPath != null &&
+        File(_settings.wallpaperPath!).existsSync();
+    final cardOpacity = hasWallpaper ? _settings.wallpaperCardOpacity : 1.0;
 
-    return Container(
+    final cardContent = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: surface,
+        color: cardCol.withValues(alpha: cardOpacity),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: text.withAlpha(30)),
         boxShadow: [
@@ -473,7 +628,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                     Text(
                       'FinAudio Soundscapes • 3:42',
                       style: TextStyle(
-                        color: text.withAlpha(160),
+                        color: secondaryTextCol,
                         fontSize: 12,
                       ),
                       maxLines: 1,
@@ -481,7 +636,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                   ],
                 ),
               ),
-              Icon(Icons.favorite, color: accent, size: 20),
+              Icon(Icons.favorite, color: secondaryAccentCol, size: 20),
             ],
           ),
           const SizedBox(height: 14),
@@ -491,7 +646,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             children: [
               Text(
                 '1:24',
-                style: TextStyle(color: text.withAlpha(140), fontSize: 11),
+                style: TextStyle(color: secondaryTextCol, fontSize: 11),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -520,7 +675,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               const SizedBox(width: 8),
               Text(
                 '3:42',
-                style: TextStyle(color: text.withAlpha(140), fontSize: 11),
+                style: TextStyle(color: secondaryTextCol, fontSize: 11),
               ),
             ],
           ),
@@ -555,19 +710,19 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
               const Spacer(),
               ElevatedButton.icon(
                 onPressed: () {},
-                icon: Icon(Icons.add, size: 16, color: onAccent),
+                icon: Icon(Icons.auto_awesome_rounded, size: 14, color: onSecondaryAccent),
                 label: Text(
-                  'Button Sample',
+                  'Accent Sample',
                   style: TextStyle(
-                    color: onAccent,
-                    fontSize: 12,
+                    color: onSecondaryAccent,
+                    fontSize: 11,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: accent,
+                  backgroundColor: secondaryAccentCol,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
+                    horizontal: 12,
                     vertical: 8,
                   ),
                   shape: RoundedRectangleBorder(
@@ -576,6 +731,374 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+
+          // Mini Player Bar strip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: playerBarCol.withValues(alpha: cardOpacity),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: text.withAlpha(20)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.speaker_group_rounded, size: 14, color: secondaryAccentCol),
+                const SizedBox(width: 6),
+                Text(
+                  'Player Bar Surface: ',
+                  style: TextStyle(color: secondaryTextCol, fontSize: 11),
+                ),
+                Text(
+                  '#${playerBarCol.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}',
+                  style: TextStyle(color: text, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                ),
+                const Spacer(),
+                Icon(Icons.volume_up_rounded, size: 14, color: secondaryTextCol),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (hasWallpaper) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: AppWallpaperBackdrop(
+          settingsService: _settings,
+          child: cardContent,
+        ),
+      );
+    }
+
+    return cardContent;
+  }
+
+  Widget _buildWallpaperSection(Color surface, Color accent, Color text) {
+    final hasWallpaper = _settings.hasWallpaper &&
+        _settings.wallpaperPath != null &&
+        File(_settings.wallpaperPath!).existsSync();
+    final onAccent = _onColorFor(accent);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: text.withAlpha(30)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (hasWallpaper) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                height: 140,
+                width: double.infinity,
+                child: AppWallpaperBackdrop(
+                  settingsService: _settings,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    alignment: Alignment.bottomLeft,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.65),
+                        ],
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _settings.wallpaperPath!.split(Platform.pathSeparator).last,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'Active Wallpaper',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _pickWallpaper,
+                    icon: const Icon(Icons.photo_library_rounded, size: 18),
+                    label: const Text('Change Picture'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: onAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    await _settings.clearWallpaper();
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Wallpaper removed.'),
+                        duration: const Duration(seconds: 2),
+                        backgroundColor: surface,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                  label: const Text('Remove'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.redAccent.shade100,
+                    side: BorderSide(color: Colors.redAccent.withAlpha(90)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Divider(color: text.withAlpha(25)),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Fine-Tune Adjustments',
+                  style: TextStyle(
+                    color: text,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    _settings.setWallpaperBrightness(0.0);
+                    _settings.setWallpaperContrast(1.0);
+                    _settings.setWallpaperVignette(0.0);
+                    _settings.setWallpaperBlur(0.0);
+                    _settings.setWallpaperCardOpacity(0.85);
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: accent,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  ),
+                  child: const Text('Reset', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _buildSliderControl(
+              label: 'Brightness',
+              displayValue: '${(_settings.wallpaperBrightness * 100).round() > 0 ? "+" : ""}${(_settings.wallpaperBrightness * 100).round()}%',
+              value: _settings.wallpaperBrightness,
+              min: -1.0,
+              max: 1.0,
+              divisions: 40,
+              icon: Icons.brightness_6_rounded,
+              textColor: text,
+              accentColor: accent,
+              onChanged: (v) => _settings.setWallpaperBrightness(v),
+            ),
+            _buildSliderControl(
+              label: 'Contrast',
+              displayValue: '${(_settings.wallpaperContrast * 100).round()}%',
+              value: _settings.wallpaperContrast,
+              min: 0.5,
+              max: 2.0,
+              divisions: 30,
+              icon: Icons.contrast_rounded,
+              textColor: text,
+              accentColor: accent,
+              onChanged: (v) => _settings.setWallpaperContrast(v),
+            ),
+            _buildSliderControl(
+              label: 'Vignette',
+              displayValue: '${(_settings.wallpaperVignette * 100).round()}%',
+              value: _settings.wallpaperVignette,
+              min: 0.0,
+              max: 1.0,
+              divisions: 20,
+              icon: Icons.vignette_rounded,
+              textColor: text,
+              accentColor: accent,
+              onChanged: (v) => _settings.setWallpaperVignette(v),
+            ),
+            _buildSliderControl(
+              label: 'Blur',
+              displayValue: '${_settings.wallpaperBlur.round()}px',
+              value: _settings.wallpaperBlur,
+              min: 0.0,
+              max: 20.0,
+              divisions: 20,
+              icon: Icons.blur_on_rounded,
+              textColor: text,
+              accentColor: accent,
+              onChanged: (v) => _settings.setWallpaperBlur(v),
+            ),
+            _buildSliderControl(
+              label: 'Card Opacity',
+              displayValue: '${(_settings.wallpaperCardOpacity * 100).round()}%',
+              value: _settings.wallpaperCardOpacity,
+              min: 0.2,
+              max: 1.0,
+              divisions: 16,
+              icon: Icons.opacity_rounded,
+              textColor: text,
+              accentColor: accent,
+              onChanged: (v) => _settings.setWallpaperCardOpacity(v),
+            ),
+          ] else ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              decoration: BoxDecoration(
+                color: text.withAlpha(10),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: text.withAlpha(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.add_photo_alternate_outlined,
+                    size: 44,
+                    color: accent.withAlpha(200),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'No Background Picture Set',
+                    style: TextStyle(
+                      color: text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Choose a wallpaper (PNG, JPG, WEBP) to customize behind the Spotify layout islands.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: text.withAlpha(150),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: _pickWallpaper,
+                    icon: const Icon(Icons.file_upload_outlined, size: 18),
+                    label: const Text('Choose Background Picture'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: onAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSliderControl({
+    required String label,
+    required String displayValue,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required IconData icon,
+    required Color textColor,
+    required Color accentColor,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: textColor.withAlpha(180)),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: textColor.withAlpha(200),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: textColor.withAlpha(18),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  displayValue,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderThemeData(
+              activeTrackColor: accentColor,
+              inactiveTrackColor: textColor.withAlpha(40),
+              thumbColor: accentColor,
+              trackHeight: 3,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+            ),
+            child: Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              divisions: divisions,
+              onChanged: onChanged,
+            ),
           ),
         ],
       ),
@@ -652,6 +1175,10 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                       _miniDot(preset.accentColor),
                       const SizedBox(width: 4),
                       _miniDot(preset.textColor),
+                      if (preset.secondaryAccentColor != null) ...[
+                        const SizedBox(width: 4),
+                        _miniDot(preset.secondaryAccentColor!),
+                      ],
                       const Spacer(),
                       if (isSelected)
                         Icon(

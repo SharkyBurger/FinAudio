@@ -11,6 +11,10 @@ class ThemePreset {
   final Color surfaceColor;
   final Color accentColor;
   final Color textColor;
+  final Color? cardColor;
+  final Color? playerBarColor;
+  final Color? secondaryTextColor;
+  final Color? secondaryAccentColor;
 
   const ThemePreset({
     required this.id,
@@ -19,6 +23,10 @@ class ThemePreset {
     required this.surfaceColor,
     required this.accentColor,
     required this.textColor,
+    this.cardColor,
+    this.playerBarColor,
+    this.secondaryTextColor,
+    this.secondaryAccentColor,
   });
 }
 
@@ -37,6 +45,16 @@ class SettingsService extends ChangeNotifier {
   static const String _keySurfaceColor = 'theme_surface_color';
   static const String _keyAccentColor = 'theme_accent_color';
   static const String _keyTextColor = 'theme_text_color';
+  static const String _keyCardColor = 'theme_card_color';
+  static const String _keyPlayerBarColor = 'theme_player_bar_color';
+  static const String _keySecondaryTextColor = 'theme_secondary_text_color';
+  static const String _keySecondaryAccentColor = 'theme_secondary_accent_color';
+  static const String _keyWallpaperPath = 'theme_wallpaper_path';
+  static const String _keyWallpaperBrightness = 'theme_wallpaper_brightness';
+  static const String _keyWallpaperContrast = 'theme_wallpaper_contrast';
+  static const String _keyWallpaperVignette = 'theme_wallpaper_vignette';
+  static const String _keyWallpaperBlur = 'theme_wallpaper_blur';
+  static const String _keyWallpaperCardOpacity = 'theme_wallpaper_card_opacity';
   static const String _keyAppVolume = 'app_volume';
   static const String _keyFavoriteArtists = 'favorite_artists';
   static const String _keySpotifyClientId = 'spotify_client_id';
@@ -57,6 +75,16 @@ class SettingsService extends ChangeNotifier {
   Color _surfaceColor = defaultSurfaceColor;
   Color _accentColor = defaultAccentColor;
   Color _textColor = defaultTextColor;
+  Color? _cardColor;
+  Color? _playerBarColor;
+  Color? _secondaryTextColor;
+  Color? _secondaryAccentColor;
+  String? _wallpaperPath;
+  double _wallpaperBrightness = 0.0;
+  double _wallpaperContrast = 1.0;
+  double _wallpaperVignette = 0.0;
+  double _wallpaperBlur = 0.0;
+  double _wallpaperCardOpacity = 0.85;
   int _darkIntensity = 1;
   double _appVolume = 1.0;
   String _spotifyClientId = '';
@@ -168,6 +196,21 @@ class SettingsService extends ChangeNotifier {
   Color get surfaceColor => _surfaceColor;
   Color get accentColor => _accentColor;
   Color get textColor => _textColor;
+  Color? get customCardColor => _cardColor;
+  Color get cardColor => _cardColor ?? _surfaceColor;
+  Color? get customPlayerBarColor => _playerBarColor;
+  Color get playerBarColor => _playerBarColor ?? _surfaceColor;
+  Color? get customSecondaryTextColor => _secondaryTextColor;
+  Color get secondaryTextColor => _secondaryTextColor ?? _textColor.withAlpha(170);
+  Color? get customSecondaryAccentColor => _secondaryAccentColor;
+  Color get secondaryAccentColor => _secondaryAccentColor ?? _accentColor;
+  String? get wallpaperPath => _wallpaperPath;
+  bool get hasWallpaper => _wallpaperPath != null && _wallpaperPath!.isNotEmpty;
+  double get wallpaperBrightness => _wallpaperBrightness;
+  double get wallpaperContrast => _wallpaperContrast;
+  double get wallpaperVignette => _wallpaperVignette;
+  double get wallpaperBlur => _wallpaperBlur;
+  double get wallpaperCardOpacity => _wallpaperCardOpacity;
   int get darkIntensity => _darkIntensity;
   double get appVolume => _appVolume;
   double get volume => _appVolume;
@@ -307,6 +350,18 @@ class SettingsService extends ChangeNotifier {
       accentColor: Color(0xFFCC0000),
       textColor: Color(0xFFE6E6E6),
     ),
+    ThemePreset(
+      id: 'ellen_joe',
+      name: 'Ellen Joe (ZZZ)',
+      backgroundColor: Color(0xFF101216),
+      surfaceColor: Color(0xFF1B1E26),
+      accentColor: Color(0xFFFF2A4D),
+      textColor: Color(0xFFF4F6FA),
+      cardColor: Color(0xFF242833),
+      playerBarColor: Color(0xFF161820),
+      secondaryTextColor: Color(0xFFA5ADBF),
+      secondaryAccentColor: Color(0xFF00E5FF),
+    ),
   ];
 
   /// Initialize and load all persisted preferences into memory.
@@ -338,6 +393,25 @@ class SettingsService extends ChangeNotifier {
     if (textInt != null) {
       _textColor = Color(textInt);
     }
+
+    final cardInt = prefs.getInt(_keyCardColor);
+    if (cardInt != null) _cardColor = Color(cardInt);
+
+    final playerBarInt = prefs.getInt(_keyPlayerBarColor);
+    if (playerBarInt != null) _playerBarColor = Color(playerBarInt);
+
+    final secondaryTextInt = prefs.getInt(_keySecondaryTextColor);
+    if (secondaryTextInt != null) _secondaryTextColor = Color(secondaryTextInt);
+
+    final secondaryAccentInt = prefs.getInt(_keySecondaryAccentColor);
+    if (secondaryAccentInt != null) _secondaryAccentColor = Color(secondaryAccentInt);
+
+    _wallpaperPath = prefs.getString(_keyWallpaperPath);
+    _wallpaperBrightness = prefs.getDouble(_keyWallpaperBrightness) ?? 0.0;
+    _wallpaperContrast = prefs.getDouble(_keyWallpaperContrast) ?? 1.0;
+    _wallpaperVignette = prefs.getDouble(_keyWallpaperVignette) ?? 0.0;
+    _wallpaperBlur = prefs.getDouble(_keyWallpaperBlur) ?? 0.0;
+    _wallpaperCardOpacity = prefs.getDouble(_keyWallpaperCardOpacity) ?? 0.85;
 
     // If still on the legacy YouTube Classic default or the previous blue-tinted default,
     // migrate seamlessly to the true Lemon Shark (Dark) theme.
@@ -890,17 +964,137 @@ class SettingsService extends ChangeNotifier {
     await prefs.setInt(_keyTextColor, color.toARGB32());
   }
 
+  /// Sets the card/tile surface color and persists it.
+  Future<void> setCardColor(Color? color) async {
+    _cardColor = color;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (color != null) {
+      await prefs.setInt(_keyCardColor, color.toARGB32());
+    } else {
+      await prefs.remove(_keyCardColor);
+    }
+  }
+
+  /// Sets the player bar color and persists it.
+  Future<void> setPlayerBarColor(Color? color) async {
+    _playerBarColor = color;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (color != null) {
+      await prefs.setInt(_keyPlayerBarColor, color.toARGB32());
+    } else {
+      await prefs.remove(_keyPlayerBarColor);
+    }
+  }
+
+  /// Sets the secondary text color and persists it.
+  Future<void> setSecondaryTextColor(Color? color) async {
+    _secondaryTextColor = color;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (color != null) {
+      await prefs.setInt(_keySecondaryTextColor, color.toARGB32());
+    } else {
+      await prefs.remove(_keySecondaryTextColor);
+    }
+  }
+
+  /// Sets the secondary accent color and persists it.
+  Future<void> setSecondaryAccentColor(Color? color) async {
+    _secondaryAccentColor = color;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (color != null) {
+      await prefs.setInt(_keySecondaryAccentColor, color.toARGB32());
+    } else {
+      await prefs.remove(_keySecondaryAccentColor);
+    }
+  }
+
+  /// Sets the custom wallpaper image file path and persists it.
+  Future<void> setWallpaperPath(String? path) async {
+    _wallpaperPath = path;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (path != null && path.isNotEmpty) {
+      await prefs.setString(_keyWallpaperPath, path);
+    } else {
+      await prefs.remove(_keyWallpaperPath);
+    }
+  }
+
+  /// Sets the wallpaper brightness (-1.0 to 1.0) and persists it.
+  Future<void> setWallpaperBrightness(double value) async {
+    _wallpaperBrightness = value.clamp(-1.0, 1.0);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyWallpaperBrightness, _wallpaperBrightness);
+  }
+
+  /// Sets the wallpaper contrast (0.5 to 2.0) and persists it.
+  Future<void> setWallpaperContrast(double value) async {
+    _wallpaperContrast = value.clamp(0.5, 2.0);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyWallpaperContrast, _wallpaperContrast);
+  }
+
+  /// Sets the wallpaper vignette overlay intensity (0.0 to 1.0) and persists it.
+  Future<void> setWallpaperVignette(double value) async {
+    _wallpaperVignette = value.clamp(0.0, 1.0);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyWallpaperVignette, _wallpaperVignette);
+  }
+
+  /// Sets the wallpaper blur intensity (0.0 to 20.0) and persists it.
+  Future<void> setWallpaperBlur(double value) async {
+    _wallpaperBlur = value.clamp(0.0, 20.0);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyWallpaperBlur, _wallpaperBlur);
+  }
+
+  /// Sets the island card opacity (0.1 to 1.0) when wallpaper is active and persists it.
+  Future<void> setWallpaperCardOpacity(double value) async {
+    _wallpaperCardOpacity = value.clamp(0.1, 1.0);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyWallpaperCardOpacity, _wallpaperCardOpacity);
+  }
+
+  /// Clears the active wallpaper.
+  Future<void> clearWallpaper() async {
+    _wallpaperPath = null;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyWallpaperPath);
+  }
+
   /// Updates any subset of custom theme colors and persists them all.
   Future<void> setCustomTheme({
     Color? background,
     Color? surface,
     Color? accent,
     Color? text,
+    Color? card,
+    Color? playerBar,
+    Color? secondaryText,
+    Color? secondaryAccent,
+    bool updateCard = false,
+    bool updatePlayerBar = false,
+    bool updateSecondaryText = false,
+    bool updateSecondaryAccent = false,
   }) async {
     if (background != null) _backgroundColor = background;
     if (surface != null) _surfaceColor = surface;
     if (accent != null) _accentColor = accent;
     if (text != null) _textColor = text;
+    if (updateCard || card != null) _cardColor = card;
+    if (updatePlayerBar || playerBar != null) _playerBarColor = playerBar;
+    if (updateSecondaryText || secondaryText != null) _secondaryTextColor = secondaryText;
+    if (updateSecondaryAccent || secondaryAccent != null) _secondaryAccentColor = secondaryAccent;
 
     notifyListeners();
 
@@ -918,6 +1112,34 @@ class SettingsService extends ChangeNotifier {
     if (text != null) {
       await prefs.setInt(_keyTextColor, text.toARGB32());
     }
+    if (updateCard || card != null) {
+      if (card != null) {
+        await prefs.setInt(_keyCardColor, card.toARGB32());
+      } else {
+        await prefs.remove(_keyCardColor);
+      }
+    }
+    if (updatePlayerBar || playerBar != null) {
+      if (playerBar != null) {
+        await prefs.setInt(_keyPlayerBarColor, playerBar.toARGB32());
+      } else {
+        await prefs.remove(_keyPlayerBarColor);
+      }
+    }
+    if (updateSecondaryText || secondaryText != null) {
+      if (secondaryText != null) {
+        await prefs.setInt(_keySecondaryTextColor, secondaryText.toARGB32());
+      } else {
+        await prefs.remove(_keySecondaryTextColor);
+      }
+    }
+    if (updateSecondaryAccent || secondaryAccent != null) {
+      if (secondaryAccent != null) {
+        await prefs.setInt(_keySecondaryAccentColor, secondaryAccent.toARGB32());
+      } else {
+        await prefs.remove(_keySecondaryAccentColor);
+      }
+    }
   }
 
   /// Applies an entire preset theme.
@@ -927,6 +1149,14 @@ class SettingsService extends ChangeNotifier {
       surface: preset.surfaceColor,
       accent: preset.accentColor,
       text: preset.textColor,
+      card: preset.cardColor,
+      playerBar: preset.playerBarColor,
+      secondaryText: preset.secondaryTextColor,
+      secondaryAccent: preset.secondaryAccentColor,
+      updateCard: true,
+      updatePlayerBar: true,
+      updateSecondaryText: true,
+      updateSecondaryAccent: true,
     );
   }
 
@@ -937,6 +1167,14 @@ class SettingsService extends ChangeNotifier {
       surface: defaultSurfaceColor,
       accent: defaultAccentColor,
       text: defaultTextColor,
+      card: null,
+      playerBar: null,
+      secondaryText: null,
+      secondaryAccent: null,
+      updateCard: true,
+      updatePlayerBar: true,
+      updateSecondaryText: true,
+      updateSecondaryAccent: true,
     );
   }
 

@@ -20,6 +20,7 @@ import 'package:finaudio/services/download_service.dart';
 import 'package:finaudio/services/discord_rpc_service.dart';
 import 'package:finaudio/services/crash_log_service.dart';
 import 'package:finaudio/widgets/now_playing_bar.dart';
+import 'package:finaudio/widgets/app_wallpaper_backdrop.dart';
 import 'package:finaudio/ui/home_screen.dart';
 import 'package:finaudio/ui/now_playing_screen.dart';
 import 'package:finaudio/ui/settings_screen.dart';
@@ -571,11 +572,18 @@ class _MainScaffoldState extends State<_MainScaffold> {
       final onAccent = accentColor.computeLuminance() > 0.5
           ? const Color(0xFF101010)
           : const Color(0xFFFFFFFF);
+      final hasWallpaper = widget.settingsService.hasWallpaper &&
+          widget.settingsService.wallpaperPath != null &&
+          File(widget.settingsService.wallpaperPath!).existsSync();
+      final cardOpacity = hasWallpaper ? widget.settingsService.wallpaperCardOpacity : 1.0;
+      final effectiveSurface = surface.withValues(alpha: cardOpacity);
 
       return Scaffold(
         backgroundColor: bg,
-        body: Padding(
-          padding: const EdgeInsets.all(8.0),
+        body: AppWallpaperBackdrop(
+          settingsService: widget.settingsService,
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
           child: Column(
             children: [
               Expanded(
@@ -615,7 +623,7 @@ class _MainScaffoldState extends State<_MainScaffold> {
                     // 2. Main Center Stage Card Island
                     Expanded(
                       child: Material(
-                        color: surface,
+                        color: effectiveSurface,
                         clipBehavior: Clip.antiAlias,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -625,7 +633,7 @@ class _MainScaffoldState extends State<_MainScaffold> {
                           children: [
                             _buildDesktopCenterTopBar(
                               context,
-                              surface,
+                              effectiveSurface,
                               bg,
                               border,
                               accentColor,
@@ -701,6 +709,7 @@ class _MainScaffoldState extends State<_MainScaffold> {
             ],
           ),
         ),
+      ),
       );
     }
 
@@ -713,9 +722,13 @@ class _MainScaffoldState extends State<_MainScaffold> {
         }
       },
       child: Scaffold(
-        body: IndexedStack(
-          index: _currentIndex.clamp(0, 3),
-          children: contentTabs,
+        backgroundColor: widget.settingsService.backgroundColor,
+        body: AppWallpaperBackdrop(
+          settingsService: widget.settingsService,
+          child: IndexedStack(
+            index: _currentIndex.clamp(0, 3),
+            children: contentTabs,
+          ),
         ),
         bottomNavigationBar: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1013,10 +1026,15 @@ class _DesktopSidebarState extends State<_DesktopSidebar> {
   Widget build(BuildContext context) {
     final surface = widget.settingsService.surfaceColor;
     final text = widget.settingsService.textColor;
-    final textMuted = text.withAlpha(170);
+    final textMuted = widget.settingsService.secondaryTextColor;
     final textDim = text.withAlpha(110);
     final cardBorder = text.withAlpha(22);
-    final inputBg = Color.lerp(surface, widget.settingsService.backgroundColor, 0.45) ?? surface;
+    final hasWallpaper = widget.settingsService.hasWallpaper &&
+        widget.settingsService.wallpaperPath != null &&
+        File(widget.settingsService.wallpaperPath!).existsSync();
+    final cardOpacity = hasWallpaper ? widget.settingsService.wallpaperCardOpacity : 1.0;
+    final effectiveSurface = surface.withValues(alpha: cardOpacity);
+    final inputBg = Color.lerp(effectiveSurface, widget.settingsService.backgroundColor, 0.45) ?? effectiveSurface;
     final user = widget.authService.currentUser;
     final isSignedIn = widget.authService.isSignedIn && user != null;
 
@@ -1035,7 +1053,7 @@ class _DesktopSidebarState extends State<_DesktopSidebar> {
       children: [
         // 1. Top Navigation Card (Spotify Island 1)
         Material(
-          color: surface,
+          color: effectiveSurface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
             side: BorderSide(color: cardBorder, width: 1),
@@ -1114,7 +1132,7 @@ class _DesktopSidebarState extends State<_DesktopSidebar> {
         // 2. Your Library Card (Spotify Island 2)
         Expanded(
           child: Material(
-            color: surface,
+            color: effectiveSurface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
               side: BorderSide(color: cardBorder, width: 1),
