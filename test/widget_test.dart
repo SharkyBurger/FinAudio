@@ -34,6 +34,7 @@ import 'package:finaudio/services/discord_rpc_service.dart';
 import 'package:finaudio/widgets/discord_login_dialog.dart';
 import 'package:finaudio/services/crash_log_service.dart';
 import 'package:finaudio/main.dart';
+import 'package:finaudio/ui/appearance_screen.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -2729,6 +2730,61 @@ void main() {
       expect(downloaded.thumbnailUrl, 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg');
       final track = downloaded.toTrack();
       expect(track.publicThumbnailUrl, 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg');
+    });
+  });
+
+  group('AppearanceScreen and Wallpaper Backdrop tests', () {
+    testWidgets('AppearanceScreen renders live preview, presets, wallpaper controls, and 8 colors with active wallpaper without unbounded layout error', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final settings = SettingsService();
+      await settings.init();
+
+      final tempDir = Directory.systemTemp.createTempSync('finaudio_test_');
+      final dummyImage = File('${tempDir.path}/test_wallpaper.png');
+      dummyImage.writeAsBytesSync([
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+        0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+        0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+        0x42, 0x60, 0x82,
+      ]);
+
+      await settings.setWallpaperPath(dummyImage.path);
+
+      await tester.binding.setSurfaceSize(const Size(1200, 2500));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppearanceScreen(settingsService: settings),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Theme & Appearance'), findsOneWidget);
+      expect(find.text('Live Preview'), findsOneWidget);
+      expect(find.text('Theme Presets'), findsOneWidget);
+      expect(find.text('Background Wallpaper'), findsOneWidget);
+      expect(find.text('Fine-Tune Adjustments'), findsOneWidget);
+      expect(find.text('Brightness'), findsOneWidget);
+      expect(find.text('Contrast'), findsOneWidget);
+      expect(find.text('Vignette'), findsOneWidget);
+      expect(find.text('Blur'), findsOneWidget);
+      expect(find.text('Card Opacity'), findsOneWidget);
+
+      expect(find.text('Background Color'), findsOneWidget);
+      expect(find.text('Cards & Surfaces'), findsOneWidget);
+      expect(find.text('Buttons & Accent'), findsOneWidget);
+      expect(find.text('Text Color'), findsOneWidget);
+      expect(find.text('Card & Tile Surface'), findsOneWidget);
+      expect(find.text('Player Bar Surface'), findsOneWidget);
+      expect(find.text('Secondary Text'), findsOneWidget);
+      expect(find.text('Secondary Accent'), findsOneWidget);
+
+      await tester.binding.setSurfaceSize(null);
+
+      try {
+        tempDir.deleteSync(recursive: true);
+      } catch (_) {}
     });
   });
 }

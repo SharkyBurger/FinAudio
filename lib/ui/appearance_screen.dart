@@ -286,8 +286,10 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      body: AppWallpaperBackdrop(
+        settingsService: _settings,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         children: [
           // Section 1: Live Interactive Preview
           _buildPreviewHeader(text),
@@ -542,6 +544,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
           const SizedBox(height: 20),
         ],
       ),
+    ),
     );
   }
 
@@ -762,16 +765,6 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
         ],
       ),
     );
-
-    if (hasWallpaper) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: AppWallpaperBackdrop(
-          settingsService: _settings,
-          child: cardContent,
-        ),
-      );
-    }
 
     return cardContent;
   }

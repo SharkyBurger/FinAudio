@@ -34,53 +34,64 @@ class AppWallpaperBackdrop extends StatelessWidget {
     final vignette = settingsService.wallpaperVignette;
     final blur = settingsService.wallpaperBlur;
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // 1. Wallpaper Image with Brightness + Contrast + Blur
-        Positioned.fill(
-          child: RepaintBoundary(
-            child: _buildFilteredWallpaper(
-              path: wallpaperPath,
-              brightness: brightness,
-              contrast: contrast,
-              blur: blur,
-            ),
-          ),
-        ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isHeightBounded = constraints.hasBoundedHeight;
+        final isWidthBounded = constraints.hasBoundedWidth;
 
-        // 2. Vignette radial gradient overlay
-        if (vignette > 0.01)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment.center,
-                    radius: 1.0,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: (vignette * 0.92).clamp(0.0, 0.98)),
-                    ],
-                    stops: const [0.30, 1.0],
-                  ),
+        final stackFit = (isHeightBounded && isWidthBounded)
+            ? StackFit.expand
+            : StackFit.loose;
+
+        return Stack(
+          fit: stackFit,
+          children: [
+            // 1. Wallpaper Image with Brightness + Contrast + Blur
+            Positioned.fill(
+              child: RepaintBoundary(
+                child: _buildFilteredWallpaper(
+                  path: wallpaperPath,
+                  brightness: brightness,
+                  contrast: contrast,
+                  blur: blur,
                 ),
               ),
             ),
-          ),
 
-        // 3. Subtle background color overlay to unify theme tint
-        Positioned.fill(
-          child: IgnorePointer(
-            child: ColoredBox(
-              color: settingsService.backgroundColor.withValues(alpha: 0.32),
+            // 2. Vignette radial gradient overlay
+            if (vignette > 0.01)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment.center,
+                        radius: 1.0,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: (vignette * 0.92).clamp(0.0, 0.98)),
+                        ],
+                        stops: const [0.30, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // 3. Subtle background color overlay to unify theme tint
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ColoredBox(
+                  color: settingsService.backgroundColor.withValues(alpha: 0.32),
+                ),
+              ),
             ),
-          ),
-        ),
 
-        // 4. Foreground Content
-        child,
-      ],
+            // 4. Foreground Content
+            child,
+          ],
+        );
+      },
     );
   }
 
