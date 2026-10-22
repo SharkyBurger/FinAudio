@@ -18,6 +18,11 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+    plugins.withId("com.android.library") {
+        if (!plugins.hasPlugin("org.jetbrains.kotlin.android")) {
+            apply(plugin = "org.jetbrains.kotlin.android")
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {
