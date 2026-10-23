@@ -12,12 +12,16 @@ import 'player_service.dart';
 /// Centralized Windows Media Key & Taskbar Thumbnail Controls Service.
 ///
 /// Provides:
-/// 1. Keyboard Media Key handling (Play/Pause, Next Track, Previous Track, Stop).
-/// 2. Windows Taskbar Thumbnail preview toolbar buttons (Prev, Play/Pause, Next) and peek tooltip.
+/// 1. System-wide & Background Media Key handling (Play/Pause, Next Track, Previous Track, Stop).
+/// 2. In-App Hardware Keyboard Media Key handling.
+/// 3. Windows Taskbar Thumbnail preview toolbar buttons (Prev, Play/Pause, Next) and peek tooltip.
 class WindowsMediaControlService {
   WindowsMediaControlService._internal();
   static final WindowsMediaControlService instance =
       WindowsMediaControlService._internal();
+
+  static const MethodChannel _mediaKeysChannel =
+      MethodChannel('finaudio/windows_media_keys');
 
   PlayerService? _playerService;
   StreamSubscription<Track?>? _nowPlayingSub;
@@ -25,6 +29,8 @@ class WindowsMediaControlService {
   Timer? _retryTimer;
 
   bool _initialized = false;
+  DateTime _lastActionTime = DateTime.fromMillisecondsSinceEpoch(0);
+  String _lastActionName = '';
 
   /// Attaches the PlayerService and initializes Windows hooks if on Windows.
   Future<void> attach({required PlayerService playerService}) async {
@@ -36,6 +42,7 @@ class WindowsMediaControlService {
     if (!_initialized) {
       _initialized = true;
       _initKeyboardHandlers();
+      _initNativeMethodChannel();
     }
 
     _nowPlayingSub?.cancel();
@@ -56,7 +63,36 @@ class WindowsMediaControlService {
     });
   }
 
-  /// Sets up hardware keyboard listeners for media keys.
+  /// Sets up native background method channel from the Windows runner.
+  void _initNativeMethodChannel() {
+    _mediaKeysChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onMediaKey') {
+        final action = call.arguments as String?;
+        switch (action) {
+          case 'playPause':
+            _handlePlayPause();
+            break;
+          case 'play':
+            _handlePlay();
+            break;
+          case 'pause':
+            _handlePause();
+            break;
+          case 'nextTrack':
+            _handleNext();
+            break;
+          case 'previousTrack':
+            _handlePrevious();
+            break;
+          case 'stop':
+            _handleStop();
+            break;
+        }
+      }
+    });
+  }
+
+  /// Sets up hardware keyboard listeners for focused media keys.
   void _initKeyboardHandlers() {
     HardwareKeyboard.instance.addHandler(_onHardwareKeyEvent);
   }
@@ -88,27 +124,44 @@ class WindowsMediaControlService {
     return false;
   }
 
+  bool _debounce(String action) {
+    final now = DateTime.now();
+    if (_lastActionName == action &&
+        now.difference(_lastActionTime).inMilliseconds < 200) {
+      return false;
+    }
+    _lastActionName = action;
+    _lastActionTime = now;
+    return true;
+  }
+
   void _handlePlayPause() {
+    if (!_debounce('playPause')) return;
     _playerService?.togglePlayPause();
   }
 
   void _handlePlay() {
+    if (!_debounce('play')) return;
     _playerService?.resume();
   }
 
   void _handlePause() {
+    if (!_debounce('pause')) return;
     _playerService?.pause();
   }
 
   void _handleNext() {
+    if (!_debounce('next')) return;
     _playerService?.nextTrack();
   }
 
   void _handlePrevious() {
+    if (!_debounce('prev')) return;
     _playerService?.previousTrack();
   }
 
   void _handleStop() {
+    if (!_debounce('stop')) return;
     _playerService?.pause();
   }
 
@@ -187,7 +240,7 @@ class WindowsMediaControlService {
     }
   }
 
-  /// Cleans up subscriptions, timers, and taskbar toolbars.
+  /// Cleans up subscriptions, timers, method channels, and taskbar toolbars.
   Future<void> dispose() async {
     _retryTimer?.cancel();
     _retryTimer = null;
@@ -200,6 +253,7 @@ class WindowsMediaControlService {
     if (!Platform.isWindows || kIsWeb) return;
     if (Platform.environment.containsKey('FLUTTER_TEST')) return;
 
+    _mediaKeysChannel.setMethodCallHandler(null);
     HardwareKeyboard.instance.removeHandler(_onHardwareKeyEvent);
 
     try {
