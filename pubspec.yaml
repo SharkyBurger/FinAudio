@@ -1,5 +1,5 @@
 name: finaudio
-description: "Ad-free YouTube audio player with Google playlist sync, spotify convert playlist to FinAduio and custom themes."
+description: "Ad-free YouTube audio player with Google playlist sync, spotify convert playlist to FinAduio and custom theme."
 publish_to: 'none'
 version: 0.4.4+1
 
@@ -27,10 +27,14 @@ dependencies:
   shimmer: ^3.0.0
   connectivity_plus: ^6.1.1
   path_provider: ^2.1.2
+  path: ^1.9.0
   dart_discord_presence:
     path: packages/dart_discord_presence
   webview_flutter: ^4.10.0
   file_picker: ^11.0.3
+  windows_taskbar: ^1.1.2
+  hotkey_manager: ^0.2.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -39,6 +43,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icons/
 
 flutter_launcher_icons:
   android: "launcher_icon"
@@ -50,4 +56,3 @@ flutter_launcher_icons:
     generate: true
     image_path: "assets/icons/ic_launcher.png"
     icon_size: 256
-

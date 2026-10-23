@@ -731,24 +731,26 @@ class _DiscordDesktopClient {
 
     // Windows Desktop IPC: use the cached mp:external/... path if available (same as mobile),
     // or fallback to publicThumb which Discord Desktop IPC proxies natively.
+    // Do not set largeAsset text to track.title because Discord displays large_text
+    // under state, which caused the track title to duplicate.
     final largeAsset = hasThumbnail
-        ? DiscordAsset.fromUrl(cachedProxy ?? publicThumb, text: track.title)
-        : DiscordAsset.fromUrl(effectiveAppIcon, text: 'FinAudio');
+        ? DiscordAsset.fromUrl(cachedProxy ?? publicThumb)
+        : DiscordAsset.fromUrl(effectiveAppIcon, text: track.formattedArtist);
 
     final smallAsset = hasThumbnail
-        ? DiscordAsset.fromUrl(effectiveAppIcon, text: 'FinAudio')
+        ? DiscordAsset.fromUrl(effectiveAppIcon, text: track.formattedArtist)
         : null;
 
     final presence = DiscordPresence(
       type: DiscordActivityType.listening,
       details: track.title,
-      state: 'by ${track.formattedArtist}',
+      state: track.formattedArtist,
       timestamps: (_lastShowTimestamps && totalDur.inMilliseconds > 0)
           ? DiscordTimestamps.range(start, end)
           : null,
       largeAsset: largeAsset,
       smallAsset: smallAsset,
-      statusDisplayType: DiscordStatusDisplayType.name,
+      statusDisplayType: DiscordStatusDisplayType.state,
       buttons: (_lastShowButtons && track.youtubeUrl.isNotEmpty)
           ? [DiscordButton(label: 'Listen on YouTube', url: track.youtubeUrl)]
           : null,
@@ -1095,16 +1097,18 @@ class _DiscordGatewayClient {
     // resolved yet, fall back to the app icon and trigger async resolution.
     String largeImage;
     String? smallImage;
-    String largeText = track.title;
+    String? largeText;
 
     if (cachedProxy != null) {
-      // Cover art proxy resolved → show cover as large, app icon as small badge
+      // Cover art proxy resolved → show cover as large, app icon as small badge.
+      // Omit large_text so Discord does not duplicate the track title under state.
       largeImage = cachedProxy;
       smallImage = appIconProxy;
+      largeText = null;
     } else {
-      // Cover art not yet proxied → use app icon as large image (no badge)
+      // Cover art not yet proxied → use app icon as large image (no badge).
       largeImage = appIconProxy ?? DiscordRpcService.appIconHash;
-      largeText = 'FinAudio';
+      largeText = track.formattedArtist;
       // Trigger async resolution so next update will have the cover art
       if (hasThumbnail) {
         DiscordRpcService.instance.resolveAsset(publicThumb);
@@ -1115,18 +1119,21 @@ class _DiscordGatewayClient {
       'name': 'FinAudio',
       'type': 2, // 2 = Listening to
       'details': track.title,
-      'state': 'by ${track.formattedArtist}',
+      'state': track.formattedArtist,
+      'status_display_type': 1, // 1 = show state (Artist) instead of app name
       'application_id': appId,
     };
 
     if (largeImage.isNotEmpty) {
       final assets = <String, dynamic>{
         'large_image': largeImage,
-        'large_text': largeText,
       };
+      if (largeText != null && largeText.isNotEmpty) {
+        assets['large_text'] = largeText;
+      }
       if (smallImage != null && smallImage.isNotEmpty) {
         assets['small_image'] = smallImage;
-        assets['small_text'] = 'FinAudio';
+        assets['small_text'] = track.formattedArtist;
       }
       activity['assets'] = assets;
     }

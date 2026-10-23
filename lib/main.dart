@@ -18,6 +18,7 @@ import 'package:finaudio/services/youtube_service.dart';
 import 'package:finaudio/services/stream_proxy_service.dart';
 import 'package:finaudio/services/download_service.dart';
 import 'package:finaudio/services/discord_rpc_service.dart';
+import 'package:finaudio/services/windows_media_control_service.dart';
 import 'package:finaudio/services/crash_log_service.dart';
 import 'package:finaudio/widgets/now_playing_bar.dart';
 import 'package:finaudio/widgets/app_wallpaper_backdrop.dart';
@@ -142,6 +143,9 @@ class _FinAudioAppState extends State<FinAudioApp> {
     DiscordRpcService.instance.attach(
       playerService: _playerService,
       settingsService: _settings,
+    );
+    WindowsMediaControlService.instance.attach(
+      playerService: _playerService,
     );
     _settings.addListener(_onSettingsChange);
     _init();
@@ -310,6 +314,7 @@ class _FinAudioAppState extends State<FinAudioApp> {
   void dispose() {
     _settings.removeListener(_onSettingsChange);
     DiscordRpcService.instance.dispose();
+    WindowsMediaControlService.instance.dispose();
     _playerService.dispose();
     super.dispose();
   }

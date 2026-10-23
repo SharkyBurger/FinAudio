@@ -35,6 +35,7 @@ import 'package:finaudio/widgets/discord_login_dialog.dart';
 import 'package:finaudio/services/crash_log_service.dart';
 import 'package:finaudio/main.dart';
 import 'package:finaudio/ui/appearance_screen.dart';
+import 'package:finaudio/services/windows_media_control_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -2785,6 +2786,44 @@ void main() {
       try {
         tempDir.deleteSync(recursive: true);
       } catch (_) {}
+    });
+
+    test('WindowsMediaControlService attach and dispose lifecycle executes cleanly', () async {
+      SharedPreferences.setMockInitialValues({});
+      final settings = SettingsService();
+      await settings.init();
+      final playerService = PlayerService(
+        initialVolume: 1.0,
+        onVolumeChanged: (_) {},
+        settingsService: settings,
+      );
+
+      // Should attach and dispose gracefully without error even in test environment
+      await WindowsMediaControlService.instance.attach(playerService: playerService);
+      await WindowsMediaControlService.instance.dispose();
+
+      playerService.dispose();
+    });
+
+    test('Track formattedArtist correctly returns clean artist list for Discord RPC', () {
+      final singleArtistTrack = Track(
+        id: 'dQw4w9WgXcQ',
+        title: 'Never Gonna Give You Up',
+        author: 'Rick Astley',
+        youtubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        duration: const Duration(minutes: 3, seconds: 32),
+      );
+      expect(singleArtistTrack.formattedArtist, 'Rick Astley');
+
+      final multiArtistTrack = Track(
+        id: 'multi123456',
+        title: 'Collab Song',
+        author: 'Artist A & Artist B ft. Artist C',
+        youtubeUrl: 'https://www.youtube.com/watch?v=multi123456',
+        duration: const Duration(minutes: 4),
+      );
+      expect(multiArtistTrack.formattedArtist, isNotEmpty);
+      expect(multiArtistTrack.formattedArtist, isNot(contains('ft.')));
     });
   });
 }
