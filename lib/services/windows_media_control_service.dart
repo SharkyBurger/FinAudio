@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
+import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
 import 'package:windows_taskbar/windows_taskbar.dart';
 
@@ -12,7 +12,7 @@ import 'player_service.dart';
 /// Centralized Windows Media Key & Taskbar Thumbnail Controls Service.
 ///
 /// Provides:
-/// 1. Global & In-App Keyboard Media Key handling (Play/Pause, Next Track, Previous Track, Stop).
+/// 1. Keyboard Media Key handling (Play/Pause, Next Track, Previous Track, Stop).
 /// 2. Windows Taskbar Thumbnail preview toolbar buttons (Prev, Play/Pause, Next) and peek tooltip.
 class WindowsMediaControlService {
   WindowsMediaControlService._internal();
@@ -22,9 +22,9 @@ class WindowsMediaControlService {
   PlayerService? _playerService;
   StreamSubscription<Track?>? _nowPlayingSub;
   StreamSubscription<bool>? _playingSub;
+  Timer? _retryTimer;
 
   bool _initialized = false;
-  final List<HotKey> _registeredHotKeys = [];
 
   /// Attaches the PlayerService and initializes Windows hooks if on Windows.
   Future<void> attach({required PlayerService playerService}) async {
@@ -36,7 +36,6 @@ class WindowsMediaControlService {
     if (!_initialized) {
       _initialized = true;
       _initKeyboardHandlers();
-      await _initGlobalHotKeys();
     }
 
     _nowPlayingSub?.cancel();
@@ -49,11 +48,15 @@ class WindowsMediaControlService {
       _updateTaskbarToolbar();
     });
 
-    // Initial toolbar population
-    _updateTaskbarToolbar();
+    // Defer initial toolbar setup until window is rendered and shown
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Timer(const Duration(milliseconds: 800), () {
+        _updateTaskbarToolbar();
+      });
+    });
   }
 
-  /// Sets up in-app focused hardware keyboard listeners for media keys.
+  /// Sets up hardware keyboard listeners for media keys.
   void _initKeyboardHandlers() {
     HardwareKeyboard.instance.addHandler(_onHardwareKeyEvent);
   }
@@ -85,51 +88,6 @@ class WindowsMediaControlService {
     return false;
   }
 
-  /// Sets up OS-level global hotkeys using `hotkey_manager` so media keys
-  /// work even when FinAudio is minimized or in the background.
-  Future<void> _initGlobalHotKeys() async {
-    try {
-      await hotKeyManager.unregisterAll();
-    } catch (_) {}
-
-    final keysToRegister = [
-      PhysicalKeyboardKey.mediaPlayPause,
-      PhysicalKeyboardKey.mediaTrackNext,
-      PhysicalKeyboardKey.mediaTrackPrevious,
-      PhysicalKeyboardKey.mediaStop,
-      PhysicalKeyboardKey.mediaSelect,
-    ];
-
-    for (final physicalKey in keysToRegister) {
-      try {
-        final hotKey = HotKey(
-          key: physicalKey,
-          scope: HotKeyScope.system,
-        );
-        await hotKeyManager.register(
-          hotKey,
-          keyDownHandler: (_) {
-            if (physicalKey == PhysicalKeyboardKey.mediaPlayPause ||
-                physicalKey == PhysicalKeyboardKey.mediaSelect) {
-              _handlePlayPause();
-            } else if (physicalKey == PhysicalKeyboardKey.mediaTrackNext) {
-              _handleNext();
-            } else if (physicalKey == PhysicalKeyboardKey.mediaTrackPrevious) {
-              _handlePrevious();
-            } else if (physicalKey == PhysicalKeyboardKey.mediaStop) {
-              _handleStop();
-            }
-          },
-        );
-        _registeredHotKeys.add(hotKey);
-      } catch (e) {
-        if (kDebugMode) {
-          print('WindowsMediaControlService: Notice - could not register $physicalKey: $e');
-        }
-      }
-    }
-  }
-
   void _handlePlayPause() {
     _playerService?.togglePlayPause();
   }
@@ -154,18 +112,28 @@ class WindowsMediaControlService {
     _playerService?.pause();
   }
 
-  /// Dynamically updates Windows taskbar thumbnail buttons & tooltip.
-  void _updateTaskbarToolbar() {
+  /// Dynamically updates Windows taskbar thumbnail buttons & tooltip safely.
+  Future<void> _updateTaskbarToolbar() async {
     if (!Platform.isWindows || kIsWeb) return;
     if (Platform.environment.containsKey('FLUTTER_TEST')) return;
 
     final player = _playerService;
     if (player == null) return;
 
-    final isPlaying = player.isPlaying;
-    final track = player.currentTrack;
-
     try {
+      final isVisible =
+          await WindowsTaskbar.isTaskbarVisible().catchError((_) => false);
+      if (!isVisible) {
+        _retryTimer?.cancel();
+        _retryTimer = Timer(const Duration(milliseconds: 1000), () {
+          _updateTaskbarToolbar();
+        });
+        return;
+      }
+
+      final isPlaying = player.isPlaying;
+      final track = player.currentTrack;
+
       final baseDir = p.dirname(Platform.resolvedExecutable);
       final assetDir = p.join(baseDir, 'data', 'flutter_assets');
 
@@ -174,7 +142,7 @@ class WindowsMediaControlService {
       final pauseFile = File(p.join(assetDir, 'assets', 'icons', 'pause.ico'));
       final nextFile = File(p.join(assetDir, 'assets', 'icons', 'next.ico'));
 
-      // If icon files don't exist yet (e.g. running outside standard build folder), skip gracefully
+      // If icon files don't exist yet (e.g. running in test/dev), skip gracefully
       if (!prevFile.existsSync() ||
           !playFile.existsSync() ||
           !pauseFile.existsSync() ||
@@ -182,10 +150,11 @@ class WindowsMediaControlService {
         return;
       }
 
-      final playPauseIcon = isPlaying ? 'assets/icons/pause.ico' : 'assets/icons/play.ico';
+      final playPauseIcon =
+          isPlaying ? 'assets/icons/pause.ico' : 'assets/icons/play.ico';
       final playPauseTooltip = isPlaying ? 'Pause' : 'Play';
 
-      WindowsTaskbar.setThumbnailToolbar([
+      await WindowsTaskbar.setThumbnailToolbar([
         ThumbnailToolbarButton(
           ThumbnailToolbarAssetIcon('assets/icons/prev.ico'),
           'Previous Track',
@@ -201,13 +170,16 @@ class WindowsMediaControlService {
           'Next Track',
           () => _handleNext(),
         ),
-      ]);
+      ]).catchError((e) {
+        if (kDebugMode) {
+          print('WindowsMediaControlService: setThumbnailToolbar error: $e');
+        }
+      });
 
-      if (track != null) {
-        WindowsTaskbar.setThumbnailTooltip('${track.title} • ${track.formattedArtist}');
-      } else {
-        WindowsTaskbar.setThumbnailTooltip('FinAudio');
-      }
+      final tooltip = track != null
+          ? '${track.title} • ${track.formattedArtist}'
+          : 'FinAudio';
+      await WindowsTaskbar.setThumbnailTooltip(tooltip).catchError((_) {});
     } catch (e) {
       if (kDebugMode) {
         print('WindowsMediaControlService: Taskbar toolbar update failed: $e');
@@ -215,8 +187,11 @@ class WindowsMediaControlService {
     }
   }
 
-  /// Cleans up subscriptions, hotkeys, and taskbar toolbars.
+  /// Cleans up subscriptions, timers, and taskbar toolbars.
   Future<void> dispose() async {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+
     _nowPlayingSub?.cancel();
     _playingSub?.cancel();
     _nowPlayingSub = null;
@@ -228,16 +203,8 @@ class WindowsMediaControlService {
     HardwareKeyboard.instance.removeHandler(_onHardwareKeyEvent);
 
     try {
-      for (final hotKey in _registeredHotKeys) {
-        await hotKeyManager.unregister(hotKey);
-      }
-      _registeredHotKeys.clear();
-      await hotKeyManager.unregisterAll();
-    } catch (_) {}
-
-    try {
-      await WindowsTaskbar.resetThumbnailToolbar();
-      await WindowsTaskbar.setThumbnailTooltip('');
+      await WindowsTaskbar.resetThumbnailToolbar().catchError((_) {});
+      await WindowsTaskbar.setThumbnailTooltip('').catchError((_) {});
     } catch (_) {}
 
     _initialized = false;
